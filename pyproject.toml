@@ -16,6 +16,7 @@ dependencies = [
     "opencv-python",
     "tqdm",
     "torch",
+    "numba",
     "ultralytics",   # YOLO (v8/v11)
 ]
 
