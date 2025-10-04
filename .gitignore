@@ -1,0 +1,11 @@
+.vscode/
+/dataset/
+runs/
+
+*.ipynb
+*.pdf
+*.pt
+
+**/__pycache__/
+**/.DS_Store
+*.egg-info/
