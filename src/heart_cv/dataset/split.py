@@ -1,21 +1,20 @@
-import random
+import numpy as np
 from pathlib import Path
 
 def split_patients(patient_dirs: list[Path], ratio=(0.7, 0.2, 0.1), seed: int = 42) -> dict[str, list[Path]]:
-    """Randomly split patient directories by ratio (train, val, test)."""
-
-    rnd = random.Random(seed)
-    patient_dirs = list(patient_dirs)
-    rnd.shuffle(patient_dirs)
+    """Deterministically split patient directories into train/val/test sets across all machines."""
+    rng = np.random.default_rng(seed)
+    patient_dirs = np.array(patient_dirs)
+    rng.shuffle(patient_dirs)
 
     n = len(patient_dirs)
     n_train = int(n * ratio[0])
     n_val = int(n * ratio[1])
 
     split_dict = {
-        "train": patient_dirs[:n_train],
-        "val": patient_dirs[n_train:n_train+n_val],
-        "test": patient_dirs[n_train+n_val:]
+        "train": list(patient_dirs[:n_train]),
+        "val": list(patient_dirs[n_train:n_train + n_val]),
+        "test": list(patient_dirs[n_train + n_val:])
     }
 
     print("✅ Patient split:")
