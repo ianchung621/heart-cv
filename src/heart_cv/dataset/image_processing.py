@@ -49,7 +49,10 @@ def load_volume(patient_dir: Path) -> np.ndarray:
     """Load all PNG slices from one patient into (H, W, Z) volume."""
     slice_paths = sorted(patient_dir.glob("*.png"))
     def load_slice(p):
-        return cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+        img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+        if img.ndim == 3 and img.shape[2] == 1: # some system reads (H,W,1)
+            img = img[:, :, 0] # ensure (H, W)
+        return img
     
     with ThreadPoolExecutor() as ex:
         imgs = list(ex.map(load_slice, slice_paths))
