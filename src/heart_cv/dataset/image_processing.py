@@ -62,7 +62,7 @@ def load_volume(patient_dir: Path) -> np.ndarray:
     return volume
 
 
-def construct_rgb_volume(volume: np.ndarray, method: str = "plain") -> np.ndarray:
+def construct_rgb_volume(volume: np.ndarray, method: str = "plain", **kwargs) -> np.ndarray:
     """Construct RGB volume (H, W, Z, 3) based on the selected method."""
     H, W, Z = volume.shape
 
@@ -81,7 +81,7 @@ def construct_rgb_volume(volume: np.ndarray, method: str = "plain") -> np.ndarra
         return vol_rgb
     
     elif method == "diffusion":
-        diffusion_length = 20  # typical size is 55.74 +- 9.66
+        diffusion_length = kwargs.get("diffusion_length", 20)  # typical size is 55.74 +- 9.66
         w_fwd, w_bwd = _exp_kernel(diffusion_length)
         vol_rgb = _jit_convolve_3D(volume, w_fwd, w_bwd)
         return np.clip(vol_rgb, 0, 255).astype(np.uint8)
@@ -97,6 +97,7 @@ def save_rgb_slices(
     image_dst: Path,
     label_src: Path,
     label_dst: Path,
+    only_label: bool = False
 ):
     """Save each slice of the RGB volume to YOLO dataset folder."""
     patient_id = patient_dir.name
@@ -110,9 +111,15 @@ def save_rgb_slices(
         label_path = label_src / patient_id / dst_lbl.name
         if label_path.exists():
             shutil.copy(label_path, dst_lbl)
+    
+    if only_label:
+        label_paths = list((label_src / patient_id).glob("*.txt"))
+        z_idxs = [int(p.stem.split("_")[-1]) - 1 for p in label_paths]  # 0-based indices
+    else:
+        z_idxs = range(Z)
 
     with ThreadPoolExecutor() as ex:
-        ex.map(save_one, range(Z))
+        ex.map(save_one, z_idxs)
 
 # ---------------------------
 # Public Entry Function
@@ -124,10 +131,12 @@ def convert_to_rgb(
     image_dst: Path,
     label_src: Path,
     label_dst: Path,
-    method: str = "plain"
+    method: str = "plain",
+    only_label: bool = False,
+    **kwargs
 ):
     """Load full (H, W, Z), transform into RGB volume, and save per-slice images."""
 
     volume = load_volume(patient_dir)
-    volume_rgb = construct_rgb_volume(volume, method=method)
-    save_rgb_slices(volume_rgb, patient_dir, split, image_dst, label_src, label_dst)
+    volume_rgb = construct_rgb_volume(volume, method=method, **kwargs)
+    save_rgb_slices(volume_rgb, patient_dir, split, image_dst, label_src, label_dst, only_label)

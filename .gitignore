@@ -1,6 +1,7 @@
 .vscode/
 /dataset/
 runs/
+models/
 
 *.ipynb
 *.pdf

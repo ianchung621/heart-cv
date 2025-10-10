@@ -27,8 +27,11 @@ def prepare_yolo_dataset(
     yolo_dataset: Path,
     splits: tuple[str] = ("train", "val", "test"),
     split_ratio: tuple[float] = (0.7, 0.2, 0.1),
+    split_patient_dict: dict[str, list] | None = None,
     method: Literal["plain", "nn-stack", "diffusion"] = "plain",
-    seed: int = 42
+    seed: int = 42,
+    only_label: bool = False,
+    ** kwargs
 ):
     print("Preparing YOLO dataset...")
 
@@ -44,8 +47,11 @@ def prepare_yolo_dataset(
         (label_dst / split).mkdir(parents=True, exist_ok=True)
 
     # split by patient
-    patient_dirs = [d for d in image_src.iterdir() if d.is_dir()]
-    split_dict = split_patients(patient_dirs, split_ratio, seed)
+    if split_patient_dict:
+        split_dict = {split: [image_src/p for p in patients] for split, patients in split_patient_dict.items()}
+    else:
+        patient_dirs = [d for d in image_src.iterdir() if d.is_dir()]
+        split_dict = split_patients(sorted(patient_dirs), split_ratio, seed)
 
     # process each split
     for split, patient_subset in split_dict.items():
@@ -57,6 +63,8 @@ def prepare_yolo_dataset(
                 label_src=label_src,
                 label_dst=label_dst,
                 method=method,
+                only_label=only_label,
+                **kwargs
             )
     
     write_dataset_yaml(yolo_dataset)
