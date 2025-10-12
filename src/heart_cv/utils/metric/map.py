@@ -1,39 +1,7 @@
 import numpy as np
 import pandas as pd
 
-def box_iou(box1: np.ndarray, box2: np.ndarray) -> np.ndarray:
-    """
-    Compute IoU between two sets of boxes.
-
-    Parameters
-    ----------
-    box1 : (N, 4)
-        Predicted boxes [x1, y1, x2, y2].
-    box2 : (M, 4)
-        Ground-truth boxes [x1, y1, x2, y2].
-
-    Returns
-    -------
-    np.ndarray : (N, M)
-        IoU matrix, IoU[i, j] = IoU(box1[i], box2[j])
-    """
-    if box1.size == 0 or box2.size == 0:
-        return np.zeros((len(box1), len(box2)))
-
-    inter_x1 = np.maximum(box1[:, None, 0], box2[None, :, 0])
-    inter_y1 = np.maximum(box1[:, None, 1], box2[None, :, 1])
-    inter_x2 = np.minimum(box1[:, None, 2], box2[None, :, 2])
-    inter_y2 = np.minimum(box1[:, None, 3], box2[None, :, 3])
-
-    inter_w = np.clip(inter_x2 - inter_x1, 0, None)
-    inter_h = np.clip(inter_y2 - inter_y1, 0, None)
-    inter_area = inter_w * inter_h
-
-    area1 = (box1[:, 2] - box1[:, 0]) * (box1[:, 3] - box1[:, 1])
-    area2 = (box2[:, 2] - box2[:, 0]) * (box2[:, 3] - box2[:, 1])
-    union = area1[:, None] + area2[None, :] - inter_area + 1e-8
-
-    return inter_area / union
+from .iou import box_iou
 
 def match_image_predictions(df_pred_img: pd.DataFrame, row_gt_img: pd.DataFrame, iou_thres: float = 0.5) -> np.ndarray:
     """
@@ -153,5 +121,4 @@ def compute_map(df_pred: pd.DataFrame, df_gt: pd.DataFrame, iou_thres: float = 0
     mpre = np.concatenate(([1.0], precision, [0.0]))
     ap = np.trapezoid(mpre, mrec)
 
-    print(f"📊 mAP@{int(round(iou_thres*100))} = {ap:.4f}")
     return ap
