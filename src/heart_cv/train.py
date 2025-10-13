@@ -84,6 +84,7 @@ def train_yolo_model(
         optimizer='adamw',
         seed=SEED,
         deterministic=True,
+        workers = YOLO_WORKERS,
         # regularization and data-augumention
         weight_decay=YOLO_WEIGHT_DECAY,
         mixup=YOLO_MIXUP,
