@@ -14,8 +14,8 @@ def build_no_background_dataset(base_dataset: Path) -> Path:
     Returns the path to the filtered dataset root.
     """
 
-    yaml_base = str(base_dataset).replace("\\", "/")
-    yaml_filtered = str(base_dataset.parent / f"{base_dataset.name}_no_bg").replace("\\", "/")
+    yaml_base = str(base_dataset)
+    yaml_filtered = str(base_dataset.parent / f"{base_dataset.name}_no_bg")
 
     base_dataset = base_dataset.resolve()  # ensure absolute
     filtered_dir = (base_dataset.parent / f"{base_dataset.name}_no_bg").resolve()
