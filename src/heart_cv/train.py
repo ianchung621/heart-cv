@@ -6,12 +6,16 @@ from ultralytics.models import YOLO
 from .config import *
 
 
+
+
 def build_no_background_dataset(base_dataset: Path) -> Path:
     """
-    Build a temporary dataset directory with only labeled images using symlinks.
+    Build a temporary dataset directory with only labeled images using *absolute-path symlinks*.
     Returns the path to the filtered dataset root.
     """
-    filtered_dir = base_dataset.parent / f"{base_dataset.name}_no_bg"
+    base_dataset = base_dataset.resolve()  # ensure absolute
+    filtered_dir = (base_dataset.parent / f"{base_dataset.name}_no_bg").resolve()
+
     if filtered_dir.exists():
         shutil.rmtree(filtered_dir)
     filtered_dir.mkdir(parents=True)
@@ -20,14 +24,12 @@ def build_no_background_dataset(base_dataset: Path) -> Path:
     yaml_src = base_dataset / "dataset.yaml"
     yaml_dst = filtered_dir / "dataset.yaml"
 
-    # Collect subdirectories (train/val/test if exist)
     for subset in ["train", "val", "test"]:
         labels_dir = base_dataset / "labels" / subset
         images_dir = base_dataset / "images" / subset
         if not labels_dir.exists() or not images_dir.exists():
             continue
 
-        # Create mirrored structure in filtered_dir
         new_labels_dir = filtered_dir / "labels" / subset
         new_images_dir = filtered_dir / "images" / subset
         new_labels_dir.mkdir(parents=True, exist_ok=True)
@@ -37,19 +39,23 @@ def build_no_background_dataset(base_dataset: Path) -> Path:
         for label_file in labels_dir.glob("*.txt"):
             if label_file.stat().st_size == 0:
                 continue  # skip empty labels
+
             img_name = label_file.stem
-            # find matching image (jpg/png/jpeg)
             for ext in (".jpg", ".jpeg", ".png"):
                 img_file = images_dir / f"{img_name}{ext}"
                 if img_file.exists():
-                    # create symlinks instead of copies
-                    os.symlink(img_file, new_images_dir / img_file.name)
-                    os.symlink(label_file, new_labels_dir / label_file.name)
-                    break
+                    img_link = new_images_dir / img_file.name
+                    label_link = new_labels_dir / label_file.name
 
-    # Write modified YAML that points to new paths
+                    # Create absolute-path symlinks
+                    os.symlink(img_file.resolve(), img_link)
+                    os.symlink(label_file.resolve(), label_link)
+
+    # Rewrite YAML with absolute paths
     yaml_text = yaml_src.read_text(encoding="utf-8")
-    yaml_text = yaml_text.replace(str(base_dataset), str(filtered_dir))
+    abs_base = str(base_dataset).replace("\\", "/")
+    abs_filtered = str(filtered_dir).replace("\\", "/")
+    yaml_text = yaml_text.replace(abs_base, abs_filtered)
     yaml_dst.write_text(yaml_text, encoding="utf-8")
 
     return filtered_dir
