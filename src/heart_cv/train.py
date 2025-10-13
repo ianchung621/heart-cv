@@ -5,20 +5,18 @@ from ultralytics.models import YOLO
 
 from .config import *
 
-
-
-
 def build_no_background_dataset(base_dataset: Path) -> Path:
     """
     Build a temporary dataset directory with only labeled images using *absolute-path symlinks*.
     Returns the path to the filtered dataset root.
     """
 
+    yaml_dir = base_dataset.parent / f"{base_dataset.name}_no_bg"
     yaml_base = str(base_dataset)
-    yaml_filtered = str(base_dataset.parent / f"{base_dataset.name}_no_bg")
+    yaml_filtered = str(yaml_dir)
 
     base_dataset = base_dataset.resolve()  # ensure absolute
-    filtered_dir = (base_dataset.parent / f"{base_dataset.name}_no_bg").resolve()
+    filtered_dir = yaml_dir.resolve()
 
     if filtered_dir.exists():
         shutil.rmtree(filtered_dir)
@@ -60,7 +58,7 @@ def build_no_background_dataset(base_dataset: Path) -> Path:
     yaml_text = yaml_text.replace(yaml_base, yaml_filtered)
     yaml_dst.write_text(yaml_text, encoding="utf-8")
 
-    return filtered_dir
+    return yaml_dir
 
 def train_yolo_model(
     yolo_dataset: Path,
