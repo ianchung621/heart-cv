@@ -13,6 +13,10 @@ def build_no_background_dataset(base_dataset: Path) -> Path:
     Build a temporary dataset directory with only labeled images using *absolute-path symlinks*.
     Returns the path to the filtered dataset root.
     """
+
+    yaml_base = str(base_dataset).replace("\\", "/")
+    yaml_filtered = str(base_dataset.parent / f"{base_dataset.name}_no_bg").replace("\\", "/")
+
     base_dataset = base_dataset.resolve()  # ensure absolute
     filtered_dir = (base_dataset.parent / f"{base_dataset.name}_no_bg").resolve()
 
@@ -53,9 +57,7 @@ def build_no_background_dataset(base_dataset: Path) -> Path:
 
     # Rewrite YAML with absolute paths
     yaml_text = yaml_src.read_text(encoding="utf-8")
-    abs_base = str(base_dataset).replace("\\", "/")
-    abs_filtered = str(filtered_dir).replace("\\", "/")
-    yaml_text = yaml_text.replace(abs_base, abs_filtered)
+    yaml_text = yaml_text.replace(yaml_base, yaml_filtered)
     yaml_dst.write_text(yaml_text, encoding="utf-8")
 
     return filtered_dir
