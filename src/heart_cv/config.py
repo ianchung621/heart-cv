@@ -6,6 +6,8 @@ DATASET_DIR = Path("dataset")
 IMAGES_SRC = DATASET_DIR / "training_image"
 LABELS_SRC = DATASET_DIR / "training_label"
 
+MODEL_DIR = Path("models")
+
 # --- splitting ---
 SPLIT_RATIO = (0.7, 0.2, 0.1)  # (train, val, test)
 SPLITS = ["train", "val", "test"]

@@ -103,7 +103,7 @@ def train_yolo_model(
     print(f"[YOLO] best: {best_model_path}")
 
     if model_name:
-        models_dir = Path("models")
+        models_dir = MODEL_DIR
         models_dir.mkdir(parents=True, exist_ok=True)
         final_path = models_dir / f"{model_name}.pt"
         shutil.copy2(best_model_path, final_path)

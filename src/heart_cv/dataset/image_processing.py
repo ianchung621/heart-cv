@@ -6,6 +6,7 @@ from functools import lru_cache
 import cv2
 import numpy as np
 from numba import njit, prange
+from tqdm import tqdm
 
 @lru_cache(maxsize=None)
 def _exp_kernel(diffusion_length: float) -> tuple[np.ndarray, np.ndarray]:
@@ -140,3 +141,44 @@ def convert_to_rgb(
     volume = load_volume(patient_dir)
     volume_rgb = construct_rgb_volume(volume, method=method, **kwargs)
     save_rgb_slices(volume_rgb, patient_dir, split, image_dst, label_src, label_dst, only_label)
+
+def prepare_yolo_test_images(
+    img_src: Path,
+    img_dst: Path,
+    method: str = "plain",
+    **kwargs
+):
+    """
+    Prepare RGB test images for YOLO inference.
+    All resulting PNGs are saved flat in img_dst (no patient subfolders).
+
+    Parameters
+    ----------
+    img_src : Path
+        Root directory containing patient subfolders with PNG slices.
+    img_dst : Path
+        Destination directory for RGB-constructed PNG images.
+    method : str
+        RGB construction method ("plain", "nn-stack", "diffusion").
+    **kwargs :
+        Extra keyword arguments passed to construct_rgb_volume().
+    """
+    img_dst.mkdir(parents=True, exist_ok=True)
+    patient_dirs = sorted([p for p in img_src.glob("*") if p.is_dir()])
+
+    for patient_dir in tqdm(patient_dirs, desc="processing patients"):
+        patient_id = patient_dir.name
+
+        volume = load_volume(patient_dir)
+        volume_rgb = construct_rgb_volume(volume, method=method, **kwargs)
+        Z = volume_rgb.shape[2]
+
+        def save_one(z):
+            img_name = f"{patient_id}_{z+1:04d}.png"
+            dst_img = img_dst / img_name
+            cv2.imwrite(str(dst_img), volume_rgb[..., z, :])
+
+        with ThreadPoolExecutor() as ex:
+            ex.map(save_one, range(Z))
+
+    print(f"✅ Finished preparing test images -> {img_dst}")
