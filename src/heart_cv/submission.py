@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 
 def write_submission_txt(
     df: pd.DataFrame,
