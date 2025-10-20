@@ -13,7 +13,7 @@ def test_yolo_model(image_dir: Path, model_path: Path, csv_name: str):
 
     model = YOLO(model_path)
 
-    results = model.predict(
+    results_gen = model.predict(
         source=image_dir,
         imgsz=YOLO_IMGSZ,
         workers=1,
@@ -24,8 +24,12 @@ def test_yolo_model(image_dir: Path, model_path: Path, csv_name: str):
         half = True,
         stream = True
     )
+    first = next(results_gen)
+    save_dir = first.save_dir
+    for _ in results_gen:
+        pass
 
-    label_dir = os.path.join(next(results).save_dir, "labels")
+    label_dir = os.path.join(save_dir, "labels")
     df_pred = load_yolo_labels(label_dir)
     csv_path = TEST_DIR / f"{csv_name}.csv"
     df_pred.to_csv(csv_path, index=False)
