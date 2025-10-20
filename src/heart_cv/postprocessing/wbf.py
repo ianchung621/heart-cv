@@ -1,7 +1,14 @@
+from typing import Literal
 import pandas as pd
 from ensemble_boxes import weighted_boxes_fusion
 
-def apply_wbf(df_pred_list:list[pd.DataFrame], image_size=(512, 512), iou_thr=0.5, skip_box_thr=0.001, weights=None):
+def apply_wbf(
+    df_pred_list:list[pd.DataFrame],
+    image_size=(512, 512),
+    iou_thr=0.5,
+    skip_box_thr=0.001,
+    weights=None,
+    conf_type: Literal['avg','max','box_and_model_avg','absent_model_aware_avg']='avg'):
     """
     Apply Weighted Box Fusion (WBF) on multiple YOLO prediction DataFrames.
 
@@ -48,7 +55,7 @@ def apply_wbf(df_pred_list:list[pd.DataFrame], image_size=(512, 512), iou_thr=0.
 
         boxes, scores, labels = weighted_boxes_fusion(
             boxes_list, scores_list, labels_list,
-            weights=weights, iou_thr=iou_thr, skip_box_thr=skip_box_thr
+            weights=weights, iou_thr=iou_thr, skip_box_thr=skip_box_thr, conf_type=conf_type
         )
 
         # rescale back
