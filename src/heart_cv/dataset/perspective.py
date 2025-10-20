@@ -77,9 +77,6 @@ def create_view(
                 w_ = (w2 - w1) / W
                 boxes_per_slice[i] = np.array([[0, wc, zc, w_, h]], dtype=float)
 
-        # reorder to (N, H2, W2)
-        final_volume = final_volume  # already (H, Z, W) with N=H as first axis
-
     elif perspective == 'y':
         # slices are fixed y -> slice plane (Z, H)
         final_volume = np.transpose(volume, (1, 2, 0))  # (W, Z, H)
@@ -100,8 +97,6 @@ def create_view(
                 h = (z2 - z1) / Z
                 w_ = (h2 - h1) / H
                 boxes_per_slice[i] = np.array([[0, hc, zc, w_, h]], dtype=float)
-
-        # already (N, H2, W2) = (W, Z, H)
 
     else:
         raise ValueError("perspective must be 'x' or 'y'")
