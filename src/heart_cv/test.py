@@ -25,7 +25,7 @@ def test_yolo_model(image_dir: Path, model_path: Path, csv_name: str):
         stream = True
     )
 
-    label_dir = os.path.join(results[0].save_dir, "labels")
+    label_dir = os.path.join(next(results).save_dir, "labels")
     df_pred = load_yolo_labels(label_dir)
     csv_path = TEST_DIR / f"{csv_name}.csv"
     df_pred.to_csv(csv_path, index=False)
