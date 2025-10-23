@@ -1,9 +1,13 @@
+
+from pathlib import Path
+
 import cv2
 import pandas as pd
 import matplotlib.pyplot as plt
 from ipywidgets import interact, IntSlider
+
+from .utils import make_slice_navigator
 from ..postprocessing import add_pid_z_paths
-from pathlib import Path
 
 def animate_predictions(df_pred: pd.DataFrame, pid: int, show_label: bool = True):
     """
@@ -26,11 +30,9 @@ def animate_predictions(df_pred: pd.DataFrame, pid: int, show_label: bool = True
         raise ValueError(f"No predictions found for pid={pid}")
 
     # sort by z for smooth navigation
-    df_pid = df_pid.sort_values("z")
+    df_pid = df_pid.sort_values(["z","conf"])
 
     # prepare image/label paths
-    img_paths = df_pid["img_path"].tolist()
-    lbl_paths = df_pid.get("label_path", [None] * len(df_pid)).tolist()
     z_values = df_pid["z"].tolist()
 
     def draw_slice(z_idx: int):
@@ -52,17 +54,21 @@ def animate_predictions(df_pred: pd.DataFrame, pid: int, show_label: bool = True
                 x1, y1, x2, y2 = map(int, [r.x1, r.y1, r.x2, r.y2])
                 color = (0, 0, 255)  # blue for normal boxes
                 thickness = 2
+                font_scale = 0.45
+                text_thickness = 1
 
                 # highlight the max-confidence box
                 if idx == idx_max:
-                    color = (0, 255, 0)  # green
+                    color = (0, 255, 50)  # green
                     thickness = 3
+                    font_scale = 0.6
+                    text_thickness = 2
 
                 cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
                 if "conf" in r:
                     cv2.putText(
                         img, f"{r.conf:.2f}", (x1, max(10, y1 - 5)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, text_thickness, cv2.LINE_AA)
 
         # --- draw ground-truth boxes if available ---
         if show_label and row.get("label_path") and Path(row["label_path"]).exists():
@@ -81,8 +87,9 @@ def animate_predictions(df_pred: pd.DataFrame, pid: int, show_label: bool = True
         plt.title(f"Patient {pid}, Slice {row['z']}")
         plt.show()
 
-    interact(
-        draw_slice,
-        z_idx=IntSlider(min=0, max=len(z_values) - 1, step=1, value=0,
-                        description="z-index", continuous_update=False),
-    )
+    #interact(
+    #    draw_slice,
+    #    z_idx=IntSlider(min=0, max=len(z_values) - 1, step=1, value=0,
+    #                    description="z-index", continuous_update=False),
+    #)
+    make_slice_navigator(draw_slice, num_slices=len(z_values))
