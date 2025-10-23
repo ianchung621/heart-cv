@@ -76,17 +76,41 @@ def get_bounding_box(
 
 def trim_by_bbox3d(df_pred: pd.DataFrame, bbox_df: pd.DataFrame, inbox_thres: float = 0.5) -> pd.DataFrame:
     """
-    Trim predictions that fall mostly outside the 3D bounding box (per patient).
+    Filter 2D slice predictions based on their overlap with a patient-level 3D bounding box.
 
-    Steps:
-      1. Ensure `pid`, `z` exist in df_pred (infer if missing).
-      2. Drop boxes with z outside [z_min, z_max].
-      3. Compute intersection area ratio of each [x1, y1, x2, y2] with bbox [x_min, y_min, x_max, y_max].
-      4. Keep boxes whose ratio >= inbox_thres.
+    This function removes detections that lie mostly outside the estimated 3D valve region
+    defined by `bbox_df`. It ensures predictions stay consistent with the anatomical range
+    derived from 3D multi-view fusion.
+
+    Parameters
+    ----------
+    df_pred : pd.DataFrame
+        Slice-level detection results containing at least the following columns:
+        ['img', 'x1', 'y1', 'x2', 'y2', 'conf'].
+        If 'pid' and 'z' are missing, they will be inferred from 'img' using `add_pid_z_paths`.
+
+    bbox_df : pd.DataFrame
+        Patient-level bounding boxes, with columns:
+        ['pid', 'x_min', 'x_max', 'y_min', 'y_max', 'z_min', 'z_max'].
+
+    inbox_thres : float, default=0.5
+        Minimum fraction of each detection's 2D area that must fall inside the patient’s
+        3D bounding box (on the same z slice). Detections below this threshold are removed.
 
     Returns
     -------
-    pd.DataFrame : filtered copy of df_pred
+    pd.DataFrame
+        Filtered detections containing only boxes mostly within the 3D bounding region.
+        The returned DataFrame preserves original columns from `df_pred` and adds
+        corresponding bounding box fields for reference:
+        ['x_min', 'x_max', 'y_min', 'y_max', 'z_min', 'z_max'].
+
+    Notes
+    -----
+    - A detection is discarded if its z-coordinate lies outside the range [z_min, z_max].
+    - The intersection-over-area ratio is computed in 2D (x–y plane) for each slice.
+    - Useful as a final stage to suppress false positives outside the anatomical region
+      inferred from 3-view 3D fusion.
     """
     # --- ensure pid, z exist ---
     if not {"pid", "z"}.issubset(df_pred.columns):

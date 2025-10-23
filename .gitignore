@@ -8,6 +8,7 @@ scripts/
 *.pdf
 *.pt
 *.csv
+submission.txt
 
 **/__pycache__/
 **/.DS_Store
