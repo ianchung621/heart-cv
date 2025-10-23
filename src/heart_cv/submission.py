@@ -27,4 +27,4 @@ def write_submission_txt(
         print("⚠️ Warning: NaN detected in the following rows")
         print(bad_rows)
               
-    df[cols].to_csv(output_path, sep=" ", index=False, header=False)
+    df[cols].to_csv(output_path, sep=" ", index=False, header=False, float_format="%.17f")
