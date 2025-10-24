@@ -13,24 +13,39 @@ class BBoxSectioner:
 
     Parameters
     ----------
-    section_bounds : dict[str, tuple[float, float]], optional
-        Fractional z-ranges for each section, relative to [z_min, z_max].
+    ssection_bounds : dict[str, tuple[float, float]] | tuple[float, float], optional
+        Fractional z-ranges for each section relative to [z_min, z_max].
+        Accepts:
+            - dict: custom boundaries for each section.
+            - tuple: (head_end, body_end), used to auto-derive head/body/tail.
         Default:
             {
-                "head": (0.0, 0.2),
-                "body": (0.2, 0.8),
-                "tail": (0.8, 1.0)
+                "head": (0.0, 0.3),
+                "body": (0.3, 0.7),
+                "tail": (0.7, 1.0)
             }
     """
 
-    def __init__(self, section_bounds: dict[str, tuple[float, float]] | None = None):
+    def __init__(self, section_bounds: dict[str, tuple[float, float]] | tuple[float, float] | None = None):
         if section_bounds is None:
-            section_bounds = {
+            self.section_bounds = {
                 "head": (0.0, 0.3),
                 "body": (0.3, 0.7),
                 "tail": (0.7, 1.0),
             }
-        self.section_bounds = section_bounds
+        elif isinstance(section_bounds, tuple) and len(section_bounds) == 2:
+            h_end, b_end = section_bounds
+            if not (0.0 <= h_end < b_end <= 1.0):
+                raise ValueError("section_bounds tuple must satisfy 0.0 <= head < body <= 1.0")
+            self.section_bounds = {
+                "head": (0.0, h_end),
+                "body": (h_end, b_end),
+                "tail": (b_end, 1.0),
+            }
+        elif isinstance(section_bounds, dict):
+            self.section_bounds = section_bounds
+        else:
+            raise TypeError("section_bounds must be dict, tuple, or None")
 
     def assign_section(self, df_pred: pd.DataFrame, bbox_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -93,6 +108,11 @@ class BBoxSectioner:
         pd.DataFrame
             Concatenated postprocessed results from all sections.
         """
+
+        # --- drop any pre-existing bbox columns ---
+        bbox_cols = ["x_min", "x_max", "y_min", "y_max", "z_min", "z_max"]
+        df_pred = df_pred.drop(columns=[c for c in bbox_cols if c in df_pred.columns])
+
         df_labeled = self.assign_section(df_pred, bbox_df)
         results = []
 

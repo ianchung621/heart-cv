@@ -1,95 +1,88 @@
-
 from pathlib import Path
-
-import cv2
 import pandas as pd
-import matplotlib.pyplot as plt
-from ipywidgets import interact, IntSlider
 
-from .utils import make_slice_navigator
+from ipywidgets import Output
+from IPython.display import display
+
+from .interactive import make_slice_navigator
+from .draw_slice import draw_slice_image
+from .metric_text import display_text, compute_metric
+from .draw_chart import compute_chart_df, draw_chart
+
 from ..postprocessing import add_pid_z_paths
+from ..dataset import load_yolo_labels
 
-def animate_predictions(df_pred: pd.DataFrame, pid: int, show_label: bool = True):
+def prepare_pid_predictions(
+    df_pred: pd.DataFrame,
+    pid: int,
+) -> tuple[pd.DataFrame, list[int], pd.DataFrame | None]:
     """
-    Interactive viewer for visualizing predicted boxes slice-by-slice.
+    Filter and prepare prediction DataFrame for one patient.
 
     Parameters
     ----------
     df_pred : pd.DataFrame
-        Columns must include ['pid', 'z', 'x1', 'y1', 'x2', 'y2', 'img'] or can infer via add_pid_z_paths().
+        Predicted boxes, must contain ['pid', 'z', 'conf', 'img_path'].
     pid : int
-        Patient ID to visualize.
-    show_label : bool, default=True
-        Show ground-truth boxes if label files exist.
+        Patient ID to visualize or evaluate.
+
+    Returns
+    -------
+    df_pid : pd.DataFrame
+        Predictions for given pid, with a new 'label_path' column.
+    z_values : list[int]
+        Sorted unique z values for the patient.
+    df_gt : pd.DataFrame or None
+        Ground-truth boxes (same structure as df_pred)
     """
-    # ensure path columns
     df_pred = add_pid_z_paths(df_pred)
     df_pid = df_pred[df_pred["pid"] == pid].copy()
 
     if df_pid.empty:
         raise ValueError(f"No predictions found for pid={pid}")
 
-    # sort by z for smooth navigation
-    df_pid = df_pid.sort_values(["z","conf"])
+    # sort + z list
+    df_pid = df_pid.sort_values(["z", "conf"])
+    z_values = sorted(df_pid["z"].unique())
 
-    # prepare image/label paths
-    z_values = df_pid["z"].tolist()
+    df_gt = None
+    if "label_path" in df_pid.columns and df_pid["label_path"].notna().any():
+        label_paths = df_pid["label_path"].unique()
+        first_path = Path(label_paths[0])
+        label_dir = first_path.parent
 
-    def draw_slice(z_idx: int):
-        row = df_pid.iloc[z_idx]
-        img = cv2.imread(str(row["img_path"]))
-        if img is None:
-            print(f"Image not found: {row['img_path']}")
-            return
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # strict sanity check
+        assert all(str(Path(p).parent) == str(label_dir) for p in label_paths), \
+            "Inconsistent label_dir detected in df_pid['label_path']"
 
-        # --- draw prediction boxes ---
-        df_z = df_pid[df_pid["z"] == row["z"]]
-        
-        if not df_z.empty:
-            # find the box with maximum confidence
-            idx_max = df_z["conf"].idxmax() if "conf" in df_z.columns else None
+        if label_dir.exists():
+            df_gt = add_pid_z_paths(load_yolo_labels(label_dir))
+            df_gt = df_gt[df_gt["pid"] == pid]
 
-            for idx, r in df_z.iterrows():
-                x1, y1, x2, y2 = map(int, [r.x1, r.y1, r.x2, r.y2])
-                color = (0, 0, 255)  # blue for normal boxes
-                thickness = 2
-                font_scale = 0.45
-                text_thickness = 1
+    return df_pid, z_values, df_gt
 
-                # highlight the max-confidence box
-                if idx == idx_max:
-                    color = (0, 255, 50)  # green
-                    thickness = 3
-                    font_scale = 0.6
-                    text_thickness = 2
+def animate_predictions(df_pred: pd.DataFrame, pid: int, metric: bool = True):
+    """
+    Interactive viewer for visualizing predicted boxes slice-by-slice.
+    Each slice (z) is shown only once, even if multiple boxes exist.
+    """
+    df_pid, z_values, df_gt = prepare_pid_predictions(df_pred, pid)
+    if metric:
+        df_metric = compute_metric(df_pid, df_gt)
+        df_chart = compute_chart_df(df_metric, df_gt)
 
-                cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
-                if "conf" in r:
-                    cv2.putText(
-                        img, f"{r.conf:.2f}", (x1, max(10, y1 - 5)),
-                        cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, text_thickness, cv2.LINE_AA)
+    def display_slice(z_idx: int, out_img: Output, out_text: Output, out_chart: Output):
+        z_val = z_values[z_idx]
+        with out_img:
+            out_img.clear_output(wait=True)
+            draw_slice_image(df_pid, z_val, df_gt)
+        if metric:
+            with out_text:
+                out_text.clear_output(wait=True)
+                display_text(df_metric, z_val, df_gt)
+            with out_chart:
+                out_chart.clear_output(wait=True)
+                draw_chart(df_chart, z_val, df_gt)
 
-        # --- draw ground-truth boxes if available ---
-        if show_label and row.get("label_path") and Path(row["label_path"]).exists():
-            with open(row["label_path"]) as f:
-                for line in f:
-                    _, xc, yc, w, h = map(float, line.split())
-                    H, W = img.shape[:2]
-                    x1 = int((xc - w / 2) * W)
-                    x2 = int((xc + w / 2) * W)
-                    y1 = int((yc - h / 2) * H)
-                    y2 = int((yc + h / 2) * H)
-                    cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
-
-        plt.imshow(img)
-        plt.axis("off")
-        plt.title(f"Patient {pid}, Slice {row['z']}")
-        plt.show()
-
-    #interact(
-    #    draw_slice,
-    #    z_idx=IntSlider(min=0, max=len(z_values) - 1, step=1, value=0,
-    #                    description="z-index", continuous_update=False),
-    #)
-    make_slice_navigator(draw_slice, num_slices=len(z_values))
+    navigator = make_slice_navigator(display_slice, num_slices=len(z_values))
+    display(navigator)

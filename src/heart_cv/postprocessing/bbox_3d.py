@@ -115,6 +115,10 @@ def trim_by_bbox3d(df_pred: pd.DataFrame, bbox_df: pd.DataFrame, inbox_thres: fl
     # --- ensure pid, z exist ---
     if not {"pid", "z"}.issubset(df_pred.columns):
         df_pred = add_pid_z_paths(df_pred)
+    
+    # --- drop any pre-existing bbox columns ---
+    bbox_cols = ["x_min", "x_max", "y_min", "y_max", "z_min", "z_max"]
+    df_pred = df_pred.drop(columns=[c for c in bbox_cols if c in df_pred.columns])
 
     # --- merge bbox info ---
     merged = df_pred.merge(bbox_df, on="pid", how="left")

@@ -3,7 +3,7 @@ import pandas as pd
 from ensemble_boxes import weighted_boxes_fusion
 
 def apply_wbf(
-    df_pred_list:list[pd.DataFrame],
+    df_pred_list:list[pd.DataFrame] | pd.DataFrame,
     image_size=(512, 512),
     iou_thr=0.5,
     skip_box_thr=0.001,
@@ -14,7 +14,7 @@ def apply_wbf(
 
     Parameters
     ----------
-    df_pred_list : list[pd.DataFrame]
+    df_pred_list : list[pd.DataFrame] | pd.Dataframe
         List of prediction DataFrames from different YOLO models.
         Each must have columns ['img', 'cls', 'conf', 'x1', 'y1', 'x2', 'y2'].
     image_size : tuple[int, int]
@@ -33,6 +33,9 @@ def apply_wbf(
     """
     W, H = image_size
     out_rows = []
+
+    if isinstance(df_pred_list, pd.DataFrame):
+        df_pred_list = [df_pred_list]
 
     imgs = sorted(set().union(*[df['img'].unique() for df in df_pred_list]))
     for img in imgs:

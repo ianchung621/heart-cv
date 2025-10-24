@@ -8,6 +8,7 @@ def propagate_box(
     length: int = 1,
     conf_decay: float = 1.0,
     direction: Literal["up", "down", "both"] = "both",
+    preserve_length: bool = True,
 ) -> pd.DataFrame:
     """
     Propagate YOLO boxes along z-axis slices for temporal/spatial continuity.
@@ -34,6 +35,10 @@ def propagate_box(
     df["pid"] = df["img"].str.extract(r"patient(\d+)_")[0].astype(int)
     df["z"] = df["img"].str.extract(r"_(\d+)$")[0].astype(int)
 
+    # --- Record z range per patient if preserving length ---
+    if preserve_length:
+        z_range = df.groupby("pid")["z"].agg(["min", "max"]).rename(columns={"min": "_z_min", "max": "_z_max"})
+
     propagated = [df]
 
     for dz in range(1, length + 1):
@@ -54,4 +59,11 @@ def propagate_box(
             propagated.append(df_down)
 
     df_all = pd.concat(propagated, ignore_index=True)
-    return df_all
+    
+    # --- Trim propagated boxes outside original z range ---
+    if preserve_length:
+        df_all = df_all.merge(z_range, on="pid", how="left")
+        df_all = df_all[(df_all["z"] >= df_all["_z_min"]) & (df_all["z"] <= df_all["_z_max"])].copy()
+        df_all = df_all.drop(columns=["_z_min", "_z_max"])
+
+    return df_all.reset_index(drop=True)

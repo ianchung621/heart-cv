@@ -42,3 +42,45 @@ def add_pid_z_paths(df: pd.DataFrame, col: str = "img") -> pd.DataFrame:
         )
 
     return df
+
+def drop_low_conf(df: pd.DataFrame, ratio: float = 0.1) -> pd.DataFrame:
+    """
+    Drop rows whose conf < ratio * conf_max within each img.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Must contain ['img', 'conf'].
+    ratio : float, default 0.1
+        Threshold ratio relative to the maximum conf per image.
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered DataFrame.
+    """
+    df = df.reset_index(drop=True)
+    conf_max = df.groupby("img")["conf"].transform("max")
+    return df[df["conf"] >= ratio * conf_max].reset_index(drop=True)
+
+import pandas as pd
+
+def keep_topk_per_img(df_pred: pd.DataFrame, top_k: int = 3) -> pd.DataFrame:
+    """
+    Keep only the top-K confidence boxes per image.
+
+    Parameters
+    ----------
+    df_pred : pd.DataFrame
+        Must contain ['img', 'conf'] plus other columns.
+    top_k : int, default 3
+        Number of top boxes to keep per image.
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered DataFrame with top-K boxes per image.
+    """
+    df_sorted = df_pred.sort_values(["img", "conf"], ascending=[True, False])
+    df_topk = df_sorted.groupby("img", group_keys=False).head(top_k)
+    return df_topk.reset_index(drop=True)
