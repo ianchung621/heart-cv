@@ -8,6 +8,7 @@ def get_bounding_box(
     df_pred_z: pd.DataFrame,
     conf_thres: float = 0.8,
     paddings: tuple[float, float, float] = (0.05, 0.05, 0.),
+    strict_z_range: bool = False
 ) -> pd.DataFrame:
     """
     Combine 3-view predictions (x, y, z) into unified 3D bounding boxes.
@@ -55,8 +56,10 @@ def get_bounding_box(
     df["y_max"] = pred_z_range["y_max"]
 
     # z from x/y views
-    df["z_min"] = pd.concat([pred_x_range["z_min"], pred_y_range["z_min"]], axis=1).min(axis=1)
-    df["z_max"] = pd.concat([pred_x_range["z_max"], pred_y_range["z_max"]], axis=1).max(axis=1)
+    df_zmin = pd.concat([pred_x_range["z_min"], pred_y_range["z_min"]], axis=1) + 1 # +1 for 1 based img
+    df_zmax = pd.concat([pred_x_range["z_max"], pred_y_range["z_max"]], axis=1) + 1
+    df["z_min"] = df_zmin.max(axis=1) if strict_z_range else df_zmin.min(axis=1)
+    df["z_max"] = df_zmax.min(axis=1) if strict_z_range else df_zmax.max(axis=1)
 
     # --- compute per-axis box sizes ---
     df["x_len"] = df["x_max"] - df["x_min"]
@@ -65,12 +68,18 @@ def get_bounding_box(
 
     # --- apply symmetric fractional padding ---
     pad_x, pad_y, pad_z = paddings
-    df["x_min"] -= df["x_len"] * pad_x / 2
-    df["x_max"] += df["x_len"] * pad_x / 2
-    df["y_min"] -= df["y_len"] * pad_y / 2
-    df["y_max"] += df["y_len"] * pad_y / 2
-    df["z_min"] -= df["z_len"] * pad_z / 2
-    df["z_max"] += df["z_len"] * pad_z / 2
+
+    def apply_axis_padding(axis: str, pad: float) -> None:
+        if pad < 1:
+            df[f"{axis}_min"] -= df[f"{axis}_len"] * pad
+            df[f"{axis}_max"] += df[f"{axis}_len"] * pad
+        else:
+            df[f"{axis}_min"] -= pad
+            df[f"{axis}_max"] += pad
+
+    apply_axis_padding("x", pad_x)
+    apply_axis_padding("y", pad_y)
+    apply_axis_padding("z", pad_z)
 
     return df[["pid","x_min","x_max","y_min","y_max","z_min","z_max"]].reset_index(drop=True)
 

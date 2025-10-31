@@ -68,6 +68,7 @@ def section_postprocess(df_wbf, bbox3d_df):
 def finalize_submission(df_sectioned):
     print("🧹 Applying final NMS...")
     df_final = apply_nms(df_sectioned)
+    df_final = df_final[df_final['conf'] > 0.1]
     print(f"✅ Final predictions: {len(df_final)} boxes")
     write_submission_txt(df_final)
     print("🏁 Submission file written.")

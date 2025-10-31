@@ -1,6 +1,7 @@
 from pathlib import Path
 import cv2
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 
 def load_image(path: Path):
@@ -51,8 +52,36 @@ def draw_label_boxes(img, df_gt_z: pd.DataFrame):
     cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
     return img
 
+def draw_x_stripes(img, df_x_z: pd.DataFrame, alpha: float = 0.4):
+    """Lightweight transparent horizontal stripes."""
+    if df_x_z is None or df_x_z.empty:
+        return img
 
-def draw_slice_image(df_pid: pd.DataFrame, z_val: int, df_gt: pd.DataFrame | None = None):
+    color = np.array([255, 0, 255], dtype=float)
+    for _, r in df_x_z.iterrows():
+        x1, x2, y = int(r.x1), int(r.x2), int(r.y)
+        img[y, x1:x2] = (1 - alpha) * img[y, x1:x2] + alpha * color
+    return img
+
+
+def draw_y_stripes(img, df_y_z: pd.DataFrame, alpha: float = 0.4):
+    """Lightweight transparent vertical stripes."""
+    if df_y_z is None or df_y_z.empty:
+        return img
+
+    color = np.array([0, 255, 255], dtype=float)
+    for _, r in df_y_z.iterrows():
+        y1, y2, x = int(r.y1), int(r.y2), int(r.x)
+        img[y1:y2, x] = (1 - alpha) * img[y1:y2, x] + alpha * color
+    return img
+
+def draw_slice_image(
+    df_pid: pd.DataFrame,
+    z_val: int,
+    df_gt: pd.DataFrame | None = None,
+    df_x: pd.DataFrame | None = None,
+    df_y: pd.DataFrame | None = None
+):
     """Render prediction and label boxes for one slice."""
     df_z = df_pid[df_pid["z"] == z_val]
     if df_z.empty:
@@ -69,6 +98,15 @@ def draw_slice_image(df_pid: pd.DataFrame, z_val: int, df_gt: pd.DataFrame | Non
         df_gt_z = df_gt[df_gt["z"] == z_val]
         if not df_gt_z.empty:
             img = draw_label_boxes(img, df_gt_z)
+    
+    # Draw projection stripes
+    if df_x is not None:
+        df_x_z = df_x[df_x["z"] == z_val]
+        img = draw_x_stripes(img, df_x_z)
+
+    if df_y is not None:
+        df_y_z = df_y[df_y["z"] == z_val]
+        img = draw_y_stripes(img, df_y_z)
 
     plt.imshow(img)
     plt.axis("off")

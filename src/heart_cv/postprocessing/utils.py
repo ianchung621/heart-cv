@@ -1,7 +1,7 @@
 from pathlib import Path
 import pandas as pd
 
-def add_pid_z_paths(df: pd.DataFrame, col: str = "img") -> pd.DataFrame:
+def add_pid_z_paths(df: pd.DataFrame, col: str = "img", overwrite: bool = False) -> pd.DataFrame:
     """
     Extract pid, z from image name (e.g. 'patient0001_0174'),
     infer dataset split (training/testing) from pid range,
@@ -11,6 +11,9 @@ def add_pid_z_paths(df: pd.DataFrame, col: str = "img") -> pd.DataFrame:
         pid 1–50   → training set (with labels)
         pid 51–100 → testing set (no labels)
     """
+    if not overwrite and {"pid","z","img_path"}.issubset(df.columns):
+        return df
+
     extracted = df[col].astype(str).str.extract(r"patient(\d+)_(\d+)")
     df["pid"] = extracted[0].astype(int)
     df["z"] = extracted[1].astype(int)

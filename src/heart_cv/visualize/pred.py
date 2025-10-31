@@ -15,7 +15,10 @@ from ..dataset import load_yolo_labels
 def prepare_pid_predictions(
     df_pred: pd.DataFrame,
     pid: int,
-) -> tuple[pd.DataFrame, list[int], pd.DataFrame | None]:
+    df_gt: pd.DataFrame = None,
+    df_x: pd.DataFrame = None,
+    df_y: pd.DataFrame = None,
+) -> tuple[pd.DataFrame, list[int], pd.DataFrame | None, pd.DataFrame | None, pd.DataFrame | None]:
     """
     Filter and prepare prediction DataFrame for one patient.
 
@@ -34,6 +37,10 @@ def prepare_pid_predictions(
         Sorted unique z values for the patient.
     df_gt : pd.DataFrame or None
         Ground-truth boxes (same structure as df_pred)
+    df_x : pd.DataFrame or None
+        X stripes boxes (same structure as df_pred)
+    df_y : pd.DataFrame or None
+        Y stripes boxes (same structure as df_pred)
     """
     df_pred = add_pid_z_paths(df_pred)
     df_pid = df_pred[df_pred["pid"] == pid].copy()
@@ -45,28 +52,50 @@ def prepare_pid_predictions(
     df_pid = df_pid.sort_values(["z", "conf"])
     z_values = sorted(df_pid["z"].unique())
 
-    df_gt = None
-    if "label_path" in df_pid.columns and df_pid["label_path"].notna().any():
-        label_paths = df_pid["label_path"].unique()
-        first_path = Path(label_paths[0])
-        label_dir = first_path.parent
+    if df_gt is None:
+        if "label_path" in df_pid.columns and df_pid["label_path"].notna().any():
+            label_paths = df_pid["label_path"].unique()
+            first_path = Path(label_paths[0])
+            label_dir = first_path.parent
 
-        # strict sanity check
-        assert all(str(Path(p).parent) == str(label_dir) for p in label_paths), \
-            "Inconsistent label_dir detected in df_pid['label_path']"
+            # strict sanity check
+            assert all(str(Path(p).parent) == str(label_dir) for p in label_paths), \
+                "Inconsistent label_dir detected in df_pid['label_path']"
 
-        if label_dir.exists():
-            df_gt = add_pid_z_paths(load_yolo_labels(label_dir))
-            df_gt = df_gt[df_gt["pid"] == pid]
+            if label_dir.exists():
+                df_gt = add_pid_z_paths(load_yolo_labels(label_dir))
+                df_gt = df_gt[df_gt["pid"] == pid]
+    else:
+        df_gt = add_pid_z_paths(df_gt)
+        df_gt = df_gt[df_gt["pid"] == pid]
+    
+    if isinstance(df_x, pd.DataFrame):
+        df_x = add_pid_z_paths(df_x)
+        df_x = df_x[df_x['pid'] == pid].copy()
+        df_x = df_x.sort_values(["z","conf"])
+    
+    if isinstance(df_y, pd.DataFrame):
+        df_y = add_pid_z_paths(df_y)
+        df_y = df_y[df_y['pid'] == pid].copy()
+        df_y = df_y.sort_values(["z","conf"])
 
-    return df_pid, z_values, df_gt
+    return df_pid, z_values, df_gt, df_x, df_y
 
-def animate_predictions(df_pred: pd.DataFrame, pid: int, metric: bool = True):
+def animate_predictions(
+    df_pred: pd.DataFrame,
+    pid: int,
+    metric: bool = True,
+    df_gt: pd.DataFrame = None,
+    df_x: pd.DataFrame = None,
+    df_y: pd.DataFrame = None
+):
     """
     Interactive viewer for visualizing predicted boxes slice-by-slice.
     Each slice (z) is shown only once, even if multiple boxes exist.
     """
-    df_pid, z_values, df_gt = prepare_pid_predictions(df_pred, pid)
+
+    df_pid, z_values, df_gt, df_x, df_y = prepare_pid_predictions(df_pred, pid, df_gt, df_x, df_y)
+    
     if metric:
         df_metric = compute_metric(df_pid, df_gt)
         df_chart = compute_chart_df(df_metric, df_gt)
@@ -75,7 +104,7 @@ def animate_predictions(df_pred: pd.DataFrame, pid: int, metric: bool = True):
         z_val = z_values[z_idx]
         with out_img:
             out_img.clear_output(wait=True)
-            draw_slice_image(df_pid, z_val, df_gt)
+            draw_slice_image(df_pid, z_val, df_gt, df_x, df_y)
         if metric:
             with out_text:
                 out_text.clear_output(wait=True)

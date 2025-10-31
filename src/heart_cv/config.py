@@ -7,6 +7,8 @@ IMAGES_SRC = DATASET_DIR / "training_image"
 LABELS_SRC = DATASET_DIR / "training_label"
 
 MODEL_DIR = Path("models")
+
+TRAIN_DIR = Path("runs/train")
 VAL_DIR = Path("runs/val")
 TEST_DIR = Path("runs/test")
 
