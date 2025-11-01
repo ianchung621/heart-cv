@@ -63,7 +63,8 @@ def build_no_background_dataset(base_dataset: Path) -> Path:
 def train_yolo_model(
     yolo_dataset: Path,
     no_background: bool = False,
-    model_name: str | None = None
+    model_name: str | None = None,
+    cropped: bool = False
 ) -> str:
     """
     Train YOLO model on the given dataset.
@@ -72,10 +73,14 @@ def train_yolo_model(
     dataset_path = build_no_background_dataset(yolo_dataset) if no_background else yolo_dataset
 
     model = YOLO(YOLO_MODEL_NAME)
+
+    imgsz = YOLO_IMGSZ/2 if cropped else YOLO_IMGSZ
+    allow_multi_scale = cropped
+
     results = model.train(
         data=str(dataset_path / "dataset.yaml"),
         epochs=YOLO_EPOCHS,
-        imgsz=YOLO_IMGSZ,
+        imgsz=imgsz,
         batch=YOLO_BATCH,
         verbose=False,
         lr0 = YOLO_LR0,
@@ -97,6 +102,7 @@ def train_yolo_model(
         flipud=YOLO_FLIPUD,
         fliplr=YOLO_FLIPLR,
         close_mosaic=YOLO_CLOSE_MOSAIC_LAST,
+        multi_scale = allow_multi_scale,
         val=True
     )
     best_model_path = os.path.join(results.save_dir, 'weights/best.pt')
