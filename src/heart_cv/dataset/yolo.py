@@ -55,6 +55,10 @@ def prepare_yolo_dataset(
 
     # process each split
     for split, patient_subset in split_dict.items():
+
+        if not patient_subset:
+            continue
+
         for patient_dir in tqdm(patient_subset, desc=f"Preparing {split} patients"):
             convert_to_rgb(
                 patient_dir=patient_dir,
