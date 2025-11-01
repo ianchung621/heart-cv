@@ -86,11 +86,14 @@ class Cropper:
         x2: int,
         y1: int,
         y2: int,
-        image_root: Path,
+        image_root: Path | None,
     ):
         pid_str = f"patient{pid:04d}"
         img_name = f"{pid_str}_{z:04d}.png"
         split = "training_image" if pid <= 50 else "testing_image"
+
+        if image_root is None:
+            image_root = Path("dataset/training_image") if pid <= 50 else Path("dataset/testing_image")
 
         src_img = image_root / pid_str / img_name
         dst_img = self.crop_dir / split / pid_str / img_name
@@ -124,7 +127,7 @@ class Cropper:
     # ------------------------------------------------------------ #
     def crop_by_bbox3d(
         self,
-        image_root: Path = Path("dataset/training_image"),
+        image_root: Path | None = None,
         max_workers: int = 8,
         save_meta: bool = True,
     ):
