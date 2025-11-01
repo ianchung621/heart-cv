@@ -1,5 +1,6 @@
 from pathlib import Path
 import shutil
+import re
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 
@@ -101,26 +102,45 @@ def save_rgb_slices(
     only_label: bool = False
 ):
     """Save each slice of the RGB volume to YOLO dataset folder."""
-    patient_id = patient_dir.name
+    patient_id = patient_dir.name  # e.g. "patient0001"
+
+    # --- detect starting z index from existing image names --- #
+    existing_imgs = list(patient_dir.glob(f"{patient_id}_*.png"))
+    if not existing_imgs:
+        raise FileNotFoundError(f"No slice images found under {patient_dir}")
+    # Extract z indices using regex pattern
+    z_indices = []
+    for p in existing_imgs:
+        m = re.search(r"_(\d{4})\.png$", p.name)
+        if m:
+            z_indices.append(int(m.group(1)))
+    z_start = min(z_indices)  # actual starting slice number
     Z = volume_rgb.shape[2]
 
-    def save_one(z):
-        img_name = f"{patient_id}_{z+1:04d}.png"
+    def save_one(local_z: int):
+        z_global = z_start + local_z  # convert to dataset z index
+        img_name = f"{patient_id}_{z_global:04d}.png"
         dst_img = image_dst / split / img_name
         dst_lbl = label_dst / split / img_name.replace(".png", ".txt")
-        cv2.imwrite(str(dst_img), volume_rgb[..., z, :])
+
+        dst_img.parent.mkdir(parents=True, exist_ok=True)
+        dst_lbl.parent.mkdir(parents=True, exist_ok=True)
+
+        cv2.imwrite(str(dst_img), volume_rgb[..., local_z, :])
+
+        # copy label if exists
         label_path = label_src / patient_id / dst_lbl.name
         if label_path.exists():
             shutil.copy(label_path, dst_lbl)
-    
+
     if only_label:
         label_paths = list((label_src / patient_id).glob("*.txt"))
-        z_idxs = [int(p.stem.split("_")[-1]) - 1 for p in label_paths]  # 0-based indices
+        z_idxs = [int(p.stem.split("_")[-1]) - 1 for p in label_paths]
     else:
         z_idxs = range(Z)
 
     with ThreadPoolExecutor() as ex:
-        ex.map(save_one, z_idxs)
+        list(ex.map(save_one, z_idxs))
 
 # ---------------------------
 # Public Entry Function
