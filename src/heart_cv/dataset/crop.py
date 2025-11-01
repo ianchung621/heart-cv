@@ -175,6 +175,8 @@ class Cropper:
         pd.DataFrame
             Columns: ['img', 'cls', 'conf', 'x1', 'y1', 'x2', 'y2']
         """
+        label_dir = Path(label_dir)
+        
         rows = []
         for txt_path in sorted(label_dir.rglob("*.txt")):
             name = txt_path.stem  # patient0001_0123

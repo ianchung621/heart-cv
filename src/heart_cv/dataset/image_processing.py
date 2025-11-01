@@ -189,16 +189,30 @@ def prepare_yolo_test_images(
     for patient_dir in tqdm(patient_dirs, desc="processing patients"):
         patient_id = patient_dir.name
 
+        # --- detect z_start from filenames --- #
+        existing_imgs = list(patient_dir.glob(f"{patient_id}_*.png"))
+        if not existing_imgs:
+            print(f"⚠️ No slices found for {patient_id}")
+            continue
+        z_indices = []
+        for p in existing_imgs:
+            m = re.search(r"_(\d{4})\.png$", p.name)
+            if m:
+                z_indices.append(int(m.group(1)))
+        z_start = min(z_indices)
+
         volume = load_volume(patient_dir)
         volume_rgb = construct_rgb_volume(volume, method=method, **kwargs)
         Z = volume_rgb.shape[2]
 
-        def save_one(z):
-            img_name = f"{patient_id}_{z+1:04d}.png"
+        def save_one(local_z: int):
+            z_global = z_start + local_z
+            img_name = f"{patient_id}_{z_global:04d}.png"
             dst_img = img_dst / img_name
-            cv2.imwrite(str(dst_img), volume_rgb[..., z, :])
+            cv2.imwrite(str(dst_img), volume_rgb[..., local_z, :])
 
         with ThreadPoolExecutor() as ex:
-            ex.map(save_one, range(Z))
+            list(ex.map(save_one, range(Z)))
+
 
     print(f"✅ Finished preparing test images -> {img_dst}")
