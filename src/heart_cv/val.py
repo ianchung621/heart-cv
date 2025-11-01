@@ -29,7 +29,7 @@ def val_cropped_yolo_model(yolo_dataset: Path, model_path: Path, csv_name: str):
 
     results = model.val(
         data=str(yolo_dataset / "dataset.yaml"),
-        imgsz = YOLO_IMGSZ/2,
+        imgsz = 256,
         workers = YOLO_WORKERS,
         save_txt = True,
         save_conf = True,

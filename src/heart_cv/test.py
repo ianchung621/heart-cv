@@ -44,7 +44,7 @@ def test_cropped_yolo_model(image_dir: Path, model_path: Path, csv_name: str, cs
 
     results_gen = model.predict(
         source=image_dir,
-        imgsz=YOLO_IMGSZ/2,
+        imgsz=256,
         workers=1,
         conf = 0.001,
         batch = 32,

@@ -74,7 +74,7 @@ def train_yolo_model(
 
     model = YOLO(YOLO_MODEL_NAME)
 
-    imgsz = YOLO_IMGSZ/2 if cropped else YOLO_IMGSZ
+    imgsz = 256 if cropped else YOLO_IMGSZ
     allow_multi_scale = cropped
 
     results = model.train(
