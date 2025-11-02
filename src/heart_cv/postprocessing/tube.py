@@ -1,25 +1,19 @@
 import networkx as nx
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
-from ..postprocessing import add_pid_z_paths
-from ..metric import compute_iou
+from typing import Callable
+from .utils import add_pid_z_paths
 
-
-
-def plot_patient_tube_graph(
+def build_patient_graph(
     df_pred: pd.DataFrame,
     pid: int,
-    df_gt: pd.DataFrame | None = None,
     edge_mode: str = "iou",
     min_weight: float = 0.05,
-    figsize=(6, 25),
-    savefn: str = "tube.pdf",
     best_weight: bool = False,
 ):
     """
-    Visualize slice-by-slice box connectivity for a single patient as a *vertical layered graph*.
+    slice-by-slice box connectivity for a single patient.
 
     Each row (y-axis) corresponds to one z-slice; nodes in that row are the predicted boxes
     for that slice (sorted by area, left→right). Edges connect boxes between adjacent z-slices
@@ -43,10 +37,6 @@ def plot_patient_tube_graph(
         - 'center': exp(-distance/20)
     min_weight : float, default=0.05
         Minimum edge weight to draw; suppresses weak connections.
-    figsize : tuple, default=(8,12)
-        Figure size for the vertical layout.
-    savefn : str, default='tube.pdf'
-        Output path for saving the figure (if None, display interactively).
 
     Returns
     -------
@@ -58,9 +48,6 @@ def plot_patient_tube_graph(
     df_pred = add_pid_z_paths(df_pred.copy())
     df_pid = df_pred[df_pred.pid == pid]
     df_pid = df_pid.sort_values("z").reset_index(drop=True)
-    if not df_gt is None:
-        df_pid = compute_iou(df_pid, df_gt)  # assume adds 'iou' column
-    df_pid["area"] = (df_pid.x2 - df_pid.x1) * (df_pid.y2 - df_pid.y1)
     zs = sorted(df_pid["z"].unique())
     G = nx.DiGraph()
 
@@ -83,10 +70,7 @@ def plot_patient_tube_graph(
 
     # --- nodes --- #
     for i, r in df_pid.iterrows():
-        if not df_gt is None:
-            G.add_node(i, z=r.z, conf=r.conf, area=r.area, iou=r.iou)
-        else:
-            G.add_node(i, z=r.z, conf=r.conf, area=r.area)
+        G.add_node(i, z=r.z, conf=r.conf, row=r.to_dict())
 
     # --- edges --- #
     for z_prev, z_next in zip(zs[:-1], zs[1:]):
@@ -113,77 +97,94 @@ def plot_patient_tube_graph(
                 for j, w in weights:
                     if w >= min_weight:
                         G.add_edge(i, j, weight=w)
-
-    # --- vertical layered layout (sorted by area descending) --- #
-    pos = {}
-    node_spacing = 1.8
-    layer_spacing = 2.0
-
-    for z in zs:
-        df_layer = df_pid[df_pid.z == z].sort_values("area", ascending=False)
-        for k, (idx, r) in enumerate(df_layer.iterrows()):
-            # horizontally spread boxes in same z
-            pos[idx] = (k * node_spacing, -z * layer_spacing)
-
-    # --- plot --- #
-    plt.figure(figsize=figsize)
-    if not df_gt is None:
-        node_colors = ["lime" if d["iou"] > 0.5 else "red" for _, d in G.nodes(data=True)]
-    else:
-        node_colors = "cyan"
-    node_sizes = [d["area"] * 0.3 for _, d in G.nodes(data=True)]
-
-    nx.draw(
-        G,
-        pos,
-        with_labels=False,
-        node_size=node_sizes,
-        node_color=node_colors,
-        edge_color="black",
-        alpha=0.85,
-    )
-
-    # --- add confidence text --- #
-    for n, (x, y) in pos.items():
-        conf = G.nodes[n]["conf"]
-        plt.text(
-            x,
-            y + 0.2,
-            f"{conf:.2f}",
-            fontsize=8,
-            fontweight='bold',
-            ha="center",
-            va="bottom",
-            color="black",
-            alpha=0.9,
-        )
-
-    # --- add z labels & horizontal separators --- #
-    x_min = min(x for x, _ in pos.values())
-
-    plt.text(x_min - 0.8, -(min(zs)-1)*layer_spacing,"z", fontsize=9, ha="right", va="center", color="blue",)
-    for z in zs:
-        y = -z * layer_spacing
-        plt.axhline(y=y - layer_spacing / 2, color="gray", linestyle="--", lw=0.8, alpha=0.5)
-        plt.text(
-            x_min - 0.8,
-            y,
-            f"{z}",
-            fontsize=9,
-            ha="right",
-            va="center",
-            color="blue",
-        )
-
-    plt.title(f"Box layered graph ({edge_mode} > {min_weight})")
-    plt.xlabel("Boxes (sorted by area, left→right)")
-    plt.ylabel("z-slice (top→bottom)")
-    plt.margins(0.05)
-
-    if savefn:
-        plt.savefig(savefn, bbox_inches="tight")
-        plt.close()
-    else:
-        plt.show()
-
     return G
+
+def parse_tubes_from_graph(G: nx.DiGraph, pid: int) -> pd.DataFrame:
+    """
+    Parse a patient graph into tube-level DataFrame.
+    Each weakly connected component is treated as one tube.
+    """
+    tubes = []
+    for tube_id, comp in enumerate(nx.weakly_connected_components(G)):
+        for node in comp:
+            row = G.nodes[node]["row"].copy()
+            row["pid"] = pid
+            row["tube_id"] = tube_id
+            tubes.append(row)
+    if not tubes:
+        return pd.DataFrame()
+    return pd.DataFrame(tubes).sort_values(["tube_id", "z"]).reset_index(drop=True)
+
+
+def build_patient_graph_and_tube_dict(
+    df_pred: pd.DataFrame,
+    edge_mode: str = "iou",
+    min_weight: float = 0.5,
+    best_weight: bool = False,
+) -> dict[int, tuple[nx.DiGraph, pd.DataFrame]]:
+    """
+    Build patient-wise graphs and their tube DataFrames.
+
+    Parameters
+    ----------
+    df_pred : pd.DataFrame
+        Must contain ['pid','z','x1','y1','x2','y2','conf'].
+    edge_mode : {'iou','center'}, default='iou'
+        Edge weight definition.
+    min_weight : float, default=0.05
+        Minimum edge weight to include.
+    best_weight : bool, default=False
+        If True, connect each node only to its best match in the next slice.
+
+    Returns
+    -------
+    dict[int, (nx.DiGraph, pd.DataFrame)]
+        Mapping: patient id → (graph, tube_df)
+    """
+    pid_dict: dict[int, tuple[nx.DiGraph, pd.DataFrame]] = {}
+    for pid in sorted(df_pred["pid"].unique()):
+        G = build_patient_graph(
+            df_pred=df_pred,
+            pid=pid,
+            edge_mode=edge_mode,
+            min_weight=min_weight,
+            best_weight=best_weight,
+        )
+        df_tube = parse_tubes_from_graph(G, pid)
+        pid_dict[pid] = (G, df_tube)
+    return pid_dict
+
+def aggregate_tube_data(
+    tube_data: dict[int, tuple[nx.DiGraph, pd.DataFrame]],
+    func: Callable[[pd.DataFrame, int], pd.DataFrame],
+) -> pd.DataFrame:
+    """
+    Apply a user-defined aggregation function to all patient tube DataFrames
+    and concatenate the results.
+
+    Parameters
+    ----------
+    tube_data : dict[int, tuple[nx.DiGraph, pd.DataFrame]]
+        Mapping {pid: (G, df_tube)} where df_tube includes columns:
+        ['img','cls','conf','x1','y1','x2','y2','pid','z','tube_id']
+    func : callable
+        Function applied to each patient's df_tube.
+        Must accept arguments (df_tube, pid) and return a DataFrame.
+
+    Returns
+    -------
+    pd.DataFrame
+        Concatenated DataFrame of all patient-level results.
+    """
+    results = []
+    for pid, (_, df_tube) in tube_data.items():
+        if df_tube is None or df_tube.empty:
+            continue
+        df_result = func(df_tube, pid)
+        if df_result is not None and not df_result.empty:
+            results.append(df_result)
+
+    if not results:
+        return pd.DataFrame()
+
+    return pd.concat(results, ignore_index=True)

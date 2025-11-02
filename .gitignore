@@ -4,6 +4,7 @@ runs/
 models/
 scripts/
 screenshots/
+pipeline/
 
 *.ipynb
 *.pdf
