@@ -1,7 +1,10 @@
 import networkx as nx
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from ..postprocessing import add_pid_z_paths
 from ..metric import compute_iou
@@ -13,7 +16,7 @@ def plot_patient_tube_graph(
     pid: int,
     df_gt: pd.DataFrame | None = None,
     edge_mode: str = "iou",
-    min_weight: float = 0.05,
+    min_weight: float = 0.5,
     figsize=(6, 25),
     savefn: str = "tube.pdf",
     best_weight: bool = False,
@@ -41,7 +44,7 @@ def plot_patient_tube_graph(
         Edge weight definition:
         - 'iou':  IoU overlap between boxes (higher → stronger connection)
         - 'center': exp(-distance/20)
-    min_weight : float, default=0.05
+    min_weight : float, default=0.5
         Minimum edge weight to draw; suppresses weak connections.
     figsize : tuple, default=(8,12)
         Figure size for the vertical layout.
@@ -116,8 +119,8 @@ def plot_patient_tube_graph(
 
     # --- vertical layered layout (sorted by area descending) --- #
     pos = {}
-    node_spacing = 1.8
-    layer_spacing = 2.0
+    node_spacing = 2.5
+    layer_spacing = 3
 
     for z in zs:
         df_layer = df_pid[df_pid.z == z].sort_values("area", ascending=False)
@@ -141,6 +144,21 @@ def plot_patient_tube_graph(
         node_color=node_colors,
         edge_color="black",
         alpha=0.85,
+        arrows=True,
+        connectionstyle="arc3,rad=0.0",
+    )
+
+    # --- add edge weights (IoU) --- #
+    edge_labels = {(u, v): f"{d['weight']:.2f}" for u, v, d in G.edges(data=True) if 'weight' in d}
+    nx.draw_networkx_edge_labels(
+        G,
+        pos,
+        edge_labels=edge_labels,
+        font_size=7,
+        font_color="grey",
+        label_pos=0.5,  # position along edge (0→source, 1→target)
+        rotate=False,
+        bbox=dict(facecolor="none", edgecolor="none", alpha=0)
     )
 
     # --- add confidence text --- #
@@ -178,7 +196,21 @@ def plot_patient_tube_graph(
     plt.title(f"Box layered graph ({edge_mode} > {min_weight})")
     plt.xlabel("Boxes (sorted by area, left→right)")
     plt.ylabel("z-slice (top→bottom)")
-    plt.margins(0.05)
+    plt.margins(0.05, tight=True)
+
+    # --- fix axis scaling for single-column (narrow) graphs --- #
+    xs, ys = zip(*pos.values())
+    x_range = max(xs) - min(xs)
+    y_range = max(ys) - min(ys)
+
+    if x_range < 1e-6:  # single column of nodes
+        pad = node_spacing * 0.6
+        plt.xlim(-pad, pad)
+    else:
+        plt.xlim(min(xs) - node_spacing, max(xs) + node_spacing)
+
+    plt.ylim(min(ys) - layer_spacing, max(ys) + layer_spacing)
+    plt.gca().set_aspect("equal", adjustable="box")
 
     if savefn:
         plt.savefig(savefn, bbox_inches="tight")
@@ -187,3 +219,27 @@ def plot_patient_tube_graph(
         plt.show()
 
     return G
+
+def plot_all_patient_tube_graph(
+    df_pred: pd.DataFrame,
+    df_gt: pd.DataFrame | None = None,
+    edge_mode: str = "iou",
+    min_weight: float = 0.5,
+    figsize=(6, 25),
+    save_dir: Path = Path("tube"),
+    best_weight: bool = False,
+):
+    df_pred = add_pid_z_paths(df_pred.copy())
+    pids = df_pred.pid.unique()
+    save_dir.mkdir(parents=True, exist_ok=True)
+    for pid in tqdm(pids, desc=f"Ploting graph to {save_dir}"):
+        plot_patient_tube_graph(
+            df_pred,
+            pid,
+            df_gt,
+            edge_mode,
+            min_weight,
+            figsize,
+            save_dir / f"{pid:04d}.pdf",
+            best_weight,
+        )

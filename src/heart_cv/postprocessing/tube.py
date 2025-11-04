@@ -99,50 +99,42 @@ def build_patient_graph(
                         G.add_edge(i, j, weight=w)
     return G
 
-def parse_tubes_from_graph(G: nx.DiGraph, pid: int) -> pd.DataFrame:
-    """
-    Parse a patient graph into tube-level DataFrame.
-    Each weakly connected component is treated as one tube.
-    """
-    tubes = []
-    for tube_id, comp in enumerate(nx.weakly_connected_components(G)):
-        for node in comp:
-            row = G.nodes[node]["row"].copy()
-            row["pid"] = pid
-            row["tube_id"] = tube_id
-            tubes.append(row)
-    if not tubes:
-        return pd.DataFrame()
-    return pd.DataFrame(tubes).sort_values(["tube_id", "z"]).reset_index(drop=True)
-
-
-def build_patient_graph_and_tube_dict(
+def build_patient_tube_df(
     df_pred: pd.DataFrame,
     edge_mode: str = "iou",
     min_weight: float = 0.5,
     best_weight: bool = False,
-) -> dict[int, tuple[nx.DiGraph, pd.DataFrame]]:
+) -> pd.DataFrame:
     """
-    Build patient-wise graphs and their tube DataFrames.
+    Build and flatten all patient tubes into a single DataFrame.
+
+    Each weakly connected component in each patient's graph is treated as one tube.
 
     Parameters
     ----------
     df_pred : pd.DataFrame
-        Must contain ['pid','z','x1','y1','x2','y2','conf'].
+        Prediction DataFrame with ['pid','z','x1','y1','x2','y2','conf'].
     edge_mode : {'iou','center'}, default='iou'
-        Edge weight definition.
+        Edge weight definition passed to build_patient_graph().
     min_weight : float, default=0.05
-        Minimum edge weight to include.
+        Minimum edge weight to connect nodes.
     best_weight : bool, default=False
         If True, connect each node only to its best match in the next slice.
 
     Returns
     -------
-    dict[int, (nx.DiGraph, pd.DataFrame)]
-        Mapping: patient id → (graph, tube_df)
+    pd.DataFrame
+        Combined DataFrame of all tubes across patients.
+        Columns: ['img','cls','conf','x1','y1','x2','y2','pid','z','tube_id']
     """
-    pid_dict: dict[int, tuple[nx.DiGraph, pd.DataFrame]] = {}
+
+    if not "pid" in df_pred.columns:
+        df_pred = add_pid_z_paths(df_pred)
+
+    all_tubes = []
+
     for pid in sorted(df_pred["pid"].unique()):
+        # 1. Build per-patient graph
         G = build_patient_graph(
             df_pred=df_pred,
             pid=pid,
@@ -150,37 +142,50 @@ def build_patient_graph_and_tube_dict(
             min_weight=min_weight,
             best_weight=best_weight,
         )
-        df_tube = parse_tubes_from_graph(G, pid)
-        pid_dict[pid] = (G, df_tube)
-    return pid_dict
 
-def aggregate_tube_data(
-    tube_data: dict[int, tuple[nx.DiGraph, pd.DataFrame]],
-    func: Callable[[pd.DataFrame, int], pd.DataFrame],
+        # 2. Parse tubes
+        tubes = []
+        for tid, comp in enumerate(nx.weakly_connected_components(G)):
+            for node in comp:
+                row = G.nodes[node]["row"].copy()
+                row["pid"] = pid
+                row["tube_id"] = tid
+                tubes.append(row)
+        if tubes:
+            all_tubes.extend(tubes)
+
+    if not all_tubes:
+        return pd.DataFrame()
+
+    df_all = pd.DataFrame(all_tubes).sort_values(["pid", "tube_id", "z"]).reset_index(drop=True)
+    return df_all
+
+def aggregate_tube_df(
+    df_tube_all: pd.DataFrame,
+    func: Callable[[pd.DataFrame], pd.DataFrame],
 ) -> pd.DataFrame:
     """
-    Apply a user-defined aggregation function to all patient tube DataFrames
-    and concatenate the results.
+    Apply a user-defined aggregation function to each patient's tube DataFrame
+    (grouped by pid) and concatenate the results.
 
     Parameters
     ----------
-    tube_data : dict[int, tuple[nx.DiGraph, pd.DataFrame]]
-        Mapping {pid: (G, df_tube)} where df_tube includes columns:
-        ['img','cls','conf','x1','y1','x2','y2','pid','z','tube_id']
+    df_tube_all : pd.DataFrame
+        Combined tube DataFrame across all patients.
+        Must include column 'pid'.
     func : callable
-        Function applied to each patient's df_tube.
-        Must accept arguments (df_tube, pid) and return a DataFrame.
+        Function of signature df_tube_pid -> DataFrame.
 
     Returns
     -------
     pd.DataFrame
-        Concatenated DataFrame of all patient-level results.
+        Concatenated DataFrame of aggregated results across patients.
     """
     results = []
-    for pid, (_, df_tube) in tube_data.items():
-        if df_tube is None or df_tube.empty:
+    for pid, df_pid in df_tube_all.groupby("pid"):
+        if df_pid.empty:
             continue
-        df_result = func(df_tube, pid)
+        df_result = func(df_pid.copy())
         if df_result is not None and not df_result.empty:
             results.append(df_result)
 

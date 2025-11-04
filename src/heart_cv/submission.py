@@ -28,3 +28,4 @@ def write_submission_txt(
         print(bad_rows)
               
     df[cols].to_csv(output_path, sep=" ", index=False, header=False, float_format="%.17f")
+    print(f"✅ Final predictions: {len(df)} boxes, submission file written at {output_path}")

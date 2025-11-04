@@ -47,6 +47,36 @@ def _jit_convolve_3D(volume: np.ndarray, w_fwd: np.ndarray, w_bwd: np.ndarray):
                 vol_rgb[y, x, z, 2] = fwd_sum
     return vol_rgb
 
+@njit(parallel = True)
+def _jit_convolve_3D_1(volume: np.ndarray, w_fwd: np.ndarray, w_bwd: np.ndarray):
+    H, W, Z = volume.shape
+    Kf = w_fwd.shape[0]
+    Kb = w_bwd.shape[0]
+    vol_rgb = np.empty((H, W, Z, 3), dtype=np.float32)
+
+    # --- For each slice z
+    for z in prange(Z):
+        for y in range(H):
+            for x in range(W):
+                # forward
+                fwd_sum = 0.0
+                for k in range(Kf):
+                    k += 1
+                    fwd_sum += volume[y, x, min(Z - 1, z + k)] * w_fwd[k]
+                # backward
+                bwd_sum = 0.0
+                for k in range(Kb):
+                    k += 1
+                    idx = z - k
+                    if idx < 0:
+                        idx = 0
+                    bwd_sum += volume[y, x, idx] * w_bwd[k]
+                # assign RGB
+                vol_rgb[y, x, z, 0] = bwd_sum
+                vol_rgb[y, x, z, 1] = volume[y, x, z]
+                vol_rgb[y, x, z, 2] = fwd_sum
+    return vol_rgb
+
 def load_volume(patient_dir: Path) -> np.ndarray:
     """Load all PNG slices from one patient into (H, W, Z) volume."""
     slice_paths = sorted(patient_dir.glob("*.png"))
@@ -87,7 +117,12 @@ def construct_rgb_volume(volume: np.ndarray, method: str = "plain", **kwargs) ->
         w_fwd, w_bwd = _exp_kernel(diffusion_length)
         vol_rgb = _jit_convolve_3D(volume, w_fwd, w_bwd)
         return np.clip(vol_rgb, 0, 255).astype(np.uint8)
-        
+    
+    elif method == "diff1":
+        diffusion_length = kwargs.get("diffusion_length", 20)  # typical size is 55.74 +- 9.66
+        w_fwd, w_bwd = _exp_kernel(diffusion_length)
+        vol_rgb = _jit_convolve_3D_1(volume, w_fwd, w_bwd)
+        return np.clip(vol_rgb, 0, 255).astype(np.uint8)
 
     else:
         raise ValueError(f"Unknown RGB method: {method}")
