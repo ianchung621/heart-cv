@@ -9,6 +9,7 @@ def propagate_box(
     conf_decay: float = 1.0,
     direction: Literal["up", "down", "both"] = "both",
     preserve_length: bool = True,
+    skip_z: int = 1,
 ) -> pd.DataFrame:
     """
     Propagate YOLO boxes along z-axis slices for temporal/spatial continuity.
@@ -42,6 +43,7 @@ def propagate_box(
     propagated = [df]
 
     for dz in range(1, length + 1):
+        dz = dz * skip_z
         decay_factor = np.exp(-conf_decay * dz)
 
         if direction in ("up", "both"):

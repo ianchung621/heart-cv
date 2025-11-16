@@ -62,6 +62,8 @@ def plot_patient_tube_graph(
     df_pid = df_pred[df_pred.pid == pid]
     df_pid = df_pid.sort_values("z").reset_index(drop=True)
     if not df_gt is None:
+        df_gt = add_pid_z_paths(df_gt.copy())
+        df_gt = df_gt[df_gt.pid == pid]
         df_pid = compute_iou(df_pid, df_gt)  # assume adds 'iou' column
     df_pid["area"] = (df_pid.x2 - df_pid.x1) * (df_pid.y2 - df_pid.y1)
     zs = sorted(df_pid["z"].unique())
@@ -142,7 +144,7 @@ def plot_patient_tube_graph(
         with_labels=False,
         node_size=node_sizes,
         node_color=node_colors,
-        edge_color="black",
+        edge_color="grey",
         alpha=0.85,
         arrows=True,
         connectionstyle="arc3,rad=0.0",
@@ -178,9 +180,10 @@ def plot_patient_tube_graph(
 
     # --- add z labels & horizontal separators --- #
     x_min = min(x for x, _ in pos.values())
-
+    z_max, z_min = df_gt.z.max(), df_gt.z.min()
     plt.text(x_min - 0.8, -(min(zs)-1)*layer_spacing,"z", fontsize=9, ha="right", va="center", color="blue",)
     for z in zs:
+        z_boundary = (z == z_min) or (z == z_max)
         y = -z * layer_spacing
         plt.axhline(y=y - layer_spacing / 2, color="gray", linestyle="--", lw=0.8, alpha=0.5)
         plt.text(
@@ -188,6 +191,7 @@ def plot_patient_tube_graph(
             y,
             f"{z}",
             fontsize=9,
+            fontweight = "bold" if z_boundary else "normal",
             ha="right",
             va="center",
             color="blue",

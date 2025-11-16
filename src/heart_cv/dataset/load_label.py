@@ -21,7 +21,7 @@ def load_yolo_labels(label_dir: str | Path, image_size: int = 512) -> pd.DataFra
     label_dir = Path(label_dir)
     rows = []
 
-    txt_files = sorted(label_dir.glob("*.txt"))
+    txt_files = sorted(label_dir.rglob("*.txt"))
     if not txt_files:
         print(f"⚠️ No .txt files found in {label_dir}")
         return pd.DataFrame(columns=["img", "cls", "conf", "x1", "y1", "x2", "y2"])

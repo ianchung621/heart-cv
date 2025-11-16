@@ -85,3 +85,50 @@ def keep_topk_per_img(df_pred: pd.DataFrame, top_k: int = 3) -> pd.DataFrame:
     df_sorted = df_pred.sort_values(["img", "conf"], ascending=[True, False])
     df_topk = df_sorted.groupby("img", group_keys=False).head(top_k)
     return df_topk.reset_index(drop=True)
+
+def trim_inconfident_head(df_pred: pd.DataFrame, conf_thres: float = 0.5) -> pd.DataFrame:
+    """
+    Iteratively trim low-confidence boxes from the head (lowest z)
+    for each patient until no boxes with confidence < conf_thres remain.
+
+    Parameters
+    ----------
+    df_pred : pd.DataFrame
+        Must include columns ['pid', 'z', 'conf'].
+    conf_thres : float, default=0.5
+        Confidence threshold. Boxes below this are trimmed from the head.
+
+    Returns
+    -------
+    pd.DataFrame
+        Trimmed DataFrame across all patients.
+    """
+    out = []
+
+    for pid, df_pid in df_pred.groupby("pid"):
+        df_pid = df_pid.sort_values("z").reset_index(drop=True)
+
+        # iterate z from head
+        z_values = sorted(df_pid["z"].unique())
+        keep_from_z = None
+
+        for z in z_values:
+            df_z = df_pid[df_pid["z"] == z]
+            if (df_z["conf"] < conf_thres).any():
+                # drop this entire z slice, continue to next z
+                continue
+            else:
+                # first z with all boxes confident -> keep from here onward
+                keep_from_z = z
+                break
+
+        if keep_from_z is None:
+            # no fully-confident slice found -> drop all for this patient
+            continue
+
+        out.append(df_pid[df_pid["z"] >= keep_from_z])
+
+    if not out:
+        return pd.DataFrame(columns=df_pred.columns)
+
+    return pd.concat(out, ignore_index=True)

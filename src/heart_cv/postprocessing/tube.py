@@ -9,9 +9,9 @@ def build_patient_graph(
     df_pred: pd.DataFrame,
     pid: int,
     edge_mode: str = "iou",
-    min_weight: float = 0.05,
+    min_weight: float = 0.5,
     best_weight: bool = False,
-):
+) -> nx.DiGraph:
     """
     slice-by-slice box connectivity for a single patient.
 

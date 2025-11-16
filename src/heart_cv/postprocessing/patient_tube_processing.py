@@ -1,4 +1,8 @@
+import networkx as nx
+from typing import Literal
+
 import pandas as pd
+import numpy as np
 
 def pruning_small_side_tubes(
     df_tube: pd.DataFrame,
@@ -172,7 +176,13 @@ def pruning_recursive_side_tubes(
     out = pd.concat(keep_rows, ignore_index=True)
     return out.sort_values(["tube_id", "z"]).reset_index(drop=True)
 
-def trim_competing_tubes(df_pid: pd.DataFrame, k: int = 2, conf_thres: float = 0.5) -> pd.DataFrame:
+def trim_competing_tubes(
+        df_pid: pd.DataFrame,
+        k: int = 3,
+        conf_thres: float = 1,
+        trim_main = True,
+        trim_tail = True
+        ) -> pd.DataFrame:
     """
     Trim 'competing box' overlap between main and tail tubes near valve tail transition.
 
@@ -252,12 +262,12 @@ def trim_competing_tubes(df_pid: pd.DataFrame, k: int = 2, conf_thres: float = 0
 
     for tube_id, dft in df_pid.groupby("tube_id"):
         n_before = len(dft)
-        if tube_id == main_tube:
+        if tube_id == main_tube and trim_main:
             dft = dft[(dft["z"] <= z_takeover + k) | (dft["conf"] >= conf_thres)]
             n_trim = n_before - len(dft)
             if n_trim > 0:
                 trim_summary.append(("main", n_trim))
-        elif tube_id == tail_tube:
+        elif tube_id == tail_tube and trim_tail:
             dft = dft[(dft["z"] >= z_takeover - k) | (dft["conf"] >= conf_thres)]
             n_trim = n_before - len(dft)
             if n_trim > 0:
@@ -269,3 +279,81 @@ def trim_competing_tubes(df_pid: pd.DataFrame, k: int = 2, conf_thres: float = 0
         print(", ".join([f"{role} trimmed {n}" for role, n in trim_summary]))
 
     return pd.concat(trimmed, ignore_index=True)
+
+def select_best_connected_path(
+    df_pid: pd.DataFrame,
+    lam: float = 0.1,
+    edge_mode: Literal["iou", "center"] = "iou",
+) -> pd.DataFrame:
+    """Patient tube processing function (full z-span, no cuts)."""
+    def _iou_xyxy(a, b):
+        ax1, ay1, ax2, ay2 = a
+        bx1, by1, bx2, by2 = b
+        ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+        ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+        iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+        inter = iw * ih
+        if inter <= 0:
+            return 0.0
+        a_area = (ax2 - ax1) * (ay2 - ay1)
+        b_area = (bx2 - bx1) * (by2 - by1)
+        denom = a_area + b_area - inter
+        return inter / denom if denom > 0 else 0.0
+
+    def _center_sim(a, b, sigma: float = 0.002):
+        ax, ay = (a[0] + a[2]) * 0.5, (a[1] + a[3]) * 0.5
+        bx, by = (b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5
+        return float(np.exp(-sigma * np.hypot(ax - bx, ay - by)))
+
+    def _edge_weight(a, b):
+        return _iou_xyxy(a, b) if edge_mode == "iou" else _center_sim(a, b)
+
+    if df_pid.empty:
+        return df_pid
+
+    out = []
+    for tube_id, df_tube in df_pid.groupby("tube_id"):
+        df_tube = df_tube.sort_values("z").reset_index(drop=False)  # keep old index in "index" col
+        layers = [g for _, g in df_tube.groupby("z", sort=True)]
+        L = len(layers)
+        if L == 0:
+            continue
+        if L == 1:
+            i_best = layers[0]["conf"].values.argmax()
+            out.append(layers[0].iloc[[i_best]])
+            continue
+
+        conf_layers = [g["conf"].to_numpy(float) for g in layers]
+        box_layers = [g[["x1", "y1", "x2", "y2"]].to_numpy(float) for g in layers]
+
+        dp = [np.full(len(conf_layers[k]), -np.inf) for k in range(L)]
+        prev = [np.full(len(conf_layers[k]), -1, int) for k in range(L)]
+        dp[0] = conf_layers[0].copy()
+
+        for k in range(1, L):
+            W = np.zeros((len(box_layers[k - 1]), len(box_layers[k])))
+            for i in range(W.shape[0]):
+                for j in range(W.shape[1]):
+                    W[i, j] = _edge_weight(box_layers[k - 1][i], box_layers[k][j])
+            for j in range(W.shape[1]):
+                scores = dp[k - 1] + lam * W[:, j]
+                i_star = int(np.argmax(scores))
+                cand = conf_layers[k][j] + scores[i_star]
+                if cand > dp[k][j]:
+                    dp[k][j] = cand
+                    prev[k][j] = i_star
+
+        j_end = int(np.argmax(dp[-1]))
+        path_idx = [j_end]
+        for k in range(L - 1, 0, -1):
+            path_idx.append(int(prev[k][path_idx[-1]]))
+        path_idx = path_idx[::-1]
+
+        # safer: use iloc because we're indexing inside df_tube, not df_pid
+        selected = [layers[k].iloc[[path_idx[k]]] for k in range(L)]
+        out.append(pd.concat(selected, ignore_index=True))
+
+    if not out:
+        return pd.DataFrame(columns=df_pid.columns)
+
+    return pd.concat(out, ignore_index=True).sort_values(["pid", "tube_id", "z"]).reset_index(drop=True)
