@@ -77,6 +77,53 @@ def _jit_convolve_3D_1(volume: np.ndarray, w_fwd: np.ndarray, w_bwd: np.ndarray)
                 vol_rgb[y, x, z, 2] = fwd_sum
     return vol_rgb
 
+def normalize_volume_uint8(
+    volume: np.ndarray,
+    p_low: float = 5.0,
+    p_high: float = 95.0,
+    return_uint8: bool = True,
+) -> np.ndarray:
+    """
+    Normalize a CT volume (H,W,D) in uint8 using patient-specific dynamic range.
+
+    Steps:
+      1. Estimate robust low/high bounds using percentiles.
+      2. Clip to [lo, hi].
+      3. Min–max normalize to [0,1].
+      4. Optionally rescale back to uint8.
+
+    Parameters
+    ----------
+    volume : np.ndarray
+        uint8 array of shape (H, W, D).
+    p_low : float
+        Lower percentile for dynamic range (default 5).
+    p_high : float
+        Upper percentile for dynamic range (default 95).
+    return_uint8 : bool
+        If True → output uint8 in [0,255].
+        If False → output float32 in [0,1].
+
+    Returns
+    -------
+    np.ndarray
+        Normalized volume, either float32 or uint8.
+    """
+    # Percentile-based patient-specific bounds
+    lo = float(np.percentile(volume, p_low))
+    hi = float(np.percentile(volume, p_high))
+    if hi <= lo:
+        hi = lo + 1.0
+
+    # Min–max normalization to [0,1]
+    vol_f = volume.astype(np.float32)
+    vol_f = np.clip(vol_f, lo, hi)
+    vol_f = (vol_f - lo) / (hi - lo)
+
+    if return_uint8:
+        return (vol_f * 255.0).astype(np.uint8)
+    return vol_f
+
 def load_volume(patient_dir: Path) -> np.ndarray:
     """Load all PNG slices from one patient into (H, W, Z) volume."""
     slice_paths = sorted(patient_dir.glob("*.png"))
@@ -100,7 +147,6 @@ def construct_rgb_volume(volume: np.ndarray, method: str = "plain", **kwargs) ->
 
     if method == "plain":
         vol_rgb = np.repeat(volume[..., None], 3, axis=-1)
-        return vol_rgb
 
     elif method == "nn-stack":
         # Pad along z-axis to handle z-1, z+1 boundaries
@@ -110,22 +156,27 @@ def construct_rgb_volume(volume: np.ndarray, method: str = "plain", **kwargs) ->
         z_curr = vol_padded[:, :, 1:-1]
         z_next = vol_padded[:, :, 2:]
         vol_rgb = np.stack([z_prev, z_curr, z_next], axis=-1)
-        return vol_rgb
     
     elif method == "diffusion":
         diffusion_length = kwargs.get("diffusion_length", 20)  # typical size is 55.74 +- 9.66
         w_fwd, w_bwd = _exp_kernel(diffusion_length)
         vol_rgb = _jit_convolve_3D(volume, w_fwd, w_bwd)
-        return np.clip(vol_rgb, 0, 255).astype(np.uint8)
+        vol_rgb =  np.clip(vol_rgb, 0, 255).astype(np.uint8)
     
     elif method == "diff1":
         diffusion_length = kwargs.get("diffusion_length", 20)  # typical size is 55.74 +- 9.66
         w_fwd, w_bwd = _exp_kernel(diffusion_length)
         vol_rgb = _jit_convolve_3D_1(volume, w_fwd, w_bwd)
-        return np.clip(vol_rgb, 0, 255).astype(np.uint8)
+        vol_rgb = np.clip(vol_rgb, 0, 255).astype(np.uint8)
 
     else:
         raise ValueError(f"Unknown RGB method: {method}")
+    
+    normalize = kwargs.get("norm", False)
+    if normalize:
+        vol_rgb = normalize_volume_uint8(vol_rgb)
+    
+    return vol_rgb
 
 def save_rgb_slices(
     volume_rgb: np.ndarray,
