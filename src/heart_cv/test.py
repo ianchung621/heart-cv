@@ -35,7 +35,9 @@ def test_yolo_model(image_dir: Path, model_path: Path, csv_name: str, csv_dir: P
     load_yolo_labels(label_dir).to_csv(csv_path, index=False)
     print(f"✅ Saved predictions to {csv_path}")
 
-def test_cropped_yolo_model(image_dir: Path, model_path: Path, csv_name: str, csv_dir: Path = TEST_DIR):
+def test_cropped_yolo_model(image_dir: Path,
+        model_path: Path, csv_name: str, csv_dir: Path = TEST_DIR, crop_dir: Path = Path("dataset/cropped")
+    ):
     """Run YOLO inference and save results as CSV."""
     TEST_DIR.mkdir(parents=True, exist_ok=True)
     print(f"🔍 Running inference: {csv_name}")
@@ -61,6 +63,6 @@ def test_cropped_yolo_model(image_dir: Path, model_path: Path, csv_name: str, cs
 
     label_dir = os.path.join(save_dir, "labels")
     csv_path = csv_dir / f"{csv_name}.csv"
-    Cropper().load_cropped_label_dir(label_dir).to_csv(csv_path, index=False)
+    Cropper(crop_dir=crop_dir).load_cropped_label_dir(label_dir).to_csv(csv_path, index=False)
     print(f"✅ Saved predictions to {csv_path}")
 

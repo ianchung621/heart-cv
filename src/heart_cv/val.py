@@ -23,7 +23,9 @@ def val_yolo_model(yolo_dataset: Path, model_path: Path, csv_name: str):
     load_yolo_labels(label_dir).to_csv(csv_path, index=False)
     print(f"✅ Saved predictions to {csv_path}")
 
-def val_cropped_yolo_model(yolo_dataset: Path, model_path: Path, csv_name: str):
+def val_cropped_yolo_model(yolo_dataset: Path,
+        model_path: Path, csv_name: str, crop_dir: Path = Path("dataset/cropped")
+    ):
 
     model = YOLO(model_path)
 
@@ -38,5 +40,5 @@ def val_cropped_yolo_model(yolo_dataset: Path, model_path: Path, csv_name: str):
 
     label_dir = os.path.join(results.save_dir, 'labels')
     csv_path = VAL_DIR / f'{csv_name}.csv'
-    Cropper().load_cropped_label_dir(label_dir).to_csv(csv_path, index=False)
+    Cropper(crop_dir=crop_dir).load_cropped_label_dir(label_dir).to_csv(csv_path, index=False)
     print(f"✅ Saved predictions to {csv_path}")
