@@ -128,3 +128,43 @@ class TubeSectionor:
             out_all.append(df_pid_out)
 
         return pd.concat(out_all, ignore_index=True, sort=False)
+    
+    def enforce_only_one_tail(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Per patient:
+        - sort by [z, section]
+        - find last 'tail_no'
+        - remove all rows with z > last_tail_no.z
+        - if same-z contains multiple boxes: keep only the 'tail_no' at that z
+        """
+        assert {"pid", "z", "section"} <= set(df.columns)
+
+        out_all = []
+
+        for pid, df_pid in df.groupby("pid", sort=False):
+            # ---- sort as required ----
+            df_pid = df_pid.sort_values(["z", "section"], ascending=[True, False]).copy()
+
+            # ---- find last tail_no ----
+            mask_tail_no = df_pid["section"] == "tail_no"
+            if not mask_tail_no.any():
+                # no trimming for this pid
+                out_all.append(df_pid)
+                continue
+
+            # last occurrence
+            last_idx = df_pid[mask_tail_no].index[-1]
+            z_last = df_pid.loc[last_idx, "z"]
+
+            # ---- keep only valid rows ----
+            # 1) rows with z < z_last   → keep all
+            keep_part1 = df_pid[df_pid["z"] < z_last]
+
+            # 2) rows at z == z_last → keep only tail_no
+            keep_part2 = df_pid[(df_pid["z"] == z_last) & (df_pid["section"] == "tail_no")]
+
+            # combine
+            df_pid_out = pd.concat([keep_part1, keep_part2], ignore_index=True)
+            out_all.append(df_pid_out)
+
+        return pd.concat(out_all, ignore_index=True)

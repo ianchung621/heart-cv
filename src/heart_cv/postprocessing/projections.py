@@ -97,3 +97,49 @@ def get_z_projections(df_pred_x: pd.DataFrame, df_pred_y: pd.DataFrame, conf_thr
     )
 
     return df_x, df_y
+
+def bbox_to_orig_coords(df_pred_x: pd.DataFrame, df_pred_y: pd.DataFrame, conf_thres: float = 0.8):
+    """
+    Convert x- and y-view predictions into per-z stripes for 3D reconstruction.
+
+    Parameters
+    ----------
+    df_pred_x : pd.DataFrame
+        Columns ['pid','z','x1','y1','x2','y2','conf'] for x-view (xz boxes)
+    df_pred_y : pd.DataFrame
+        Columns ['pid','z','x1','y1','x2','y2','conf'] for y-view (yz boxes)
+    conf_thres : float
+        Minimum confidence to keep
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        (df_x, df_y) expanded to stripes with columns
+        ['pid','z','x1','x2','y','conf','img'], ['pid','z','y1','y2','x','conf','img']
+    """
+    df_x = add_pid_z_paths(df_pred_x)
+    df_y = add_pid_z_paths(df_pred_y)
+
+    # --- x projection ---
+    df_x = df_x.rename(columns={
+        "x1": "x1", "x2": "x2",
+        "y1": "z1", "y2": "z2",
+        "z": "y"
+    })
+    df_x = df_x[df_x["conf"] > conf_thres]
+    df_x["z1"] += 1
+    df_x["z2"] += 1
+    df_x["y"] -= 1
+
+    # --- y projection ---
+    df_y = df_y.rename(columns={
+        "x1": "y1", "x2": "y2",
+        "y1": "z1", "y2": "z2",
+        "z": "x"
+    })
+    df_y = df_y[df_y["conf"] > conf_thres]
+    df_y["z1"] += 1
+    df_y["z2"] += 1
+    df_y["x"] -= 1
+
+    return df_x, df_y

@@ -40,7 +40,8 @@ def apply_wbf(
     imgs = sorted(set().union(*[df['img'].unique() for df in df_pred_list]))
     for img in imgs:
         boxes_list, scores_list, labels_list = [], [], []
-        for df in df_pred_list:
+        contributing = []
+        for idx, df in enumerate(df_pred_list):
             d: pd.DataFrame = df[df['img'] == img]
             if d.empty:
                 continue
@@ -52,13 +53,15 @@ def apply_wbf(
             boxes_list.append(boxes.tolist())
             scores_list.append(d['conf'].tolist())
             labels_list.append(d['cls'].tolist())
+            contributing.append(idx)
 
         if not boxes_list:
             continue
 
+        local_weights = [weights[i] for i in contributing] if not weights is None else None
         boxes, scores, labels = weighted_boxes_fusion(
             boxes_list, scores_list, labels_list,
-            weights=weights, iou_thr=iou_thr, skip_box_thr=skip_box_thr, conf_type=conf_type
+            weights=local_weights, iou_thr=iou_thr, skip_box_thr=skip_box_thr, conf_type=conf_type
         )
 
         # rescale back

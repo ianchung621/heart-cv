@@ -180,7 +180,11 @@ def plot_patient_tube_graph(
 
     # --- add z labels & horizontal separators --- #
     x_min = min(x for x, _ in pos.values())
-    z_max, z_min = df_gt.z.max(), df_gt.z.min()
+    if not df_gt is None:
+        z_max, z_min = df_gt.z.max(), df_gt.z.min()
+    else:
+        z_max, z_min = None, None
+        
     plt.text(x_min - 0.8, -(min(zs)-1)*layer_spacing,"z", fontsize=9, ha="right", va="center", color="blue",)
     for z in zs:
         z_boundary = (z == z_min) or (z == z_max)

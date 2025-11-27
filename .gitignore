@@ -5,6 +5,7 @@ models/
 scripts/
 screenshots/
 pipeline/
+cv/
 
 *.ipynb
 *.pdf
