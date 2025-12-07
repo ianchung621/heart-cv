@@ -1,10 +1,11 @@
 .vscode/
 /dataset/
 runs/
+cv_runs/
 models/
 scripts/
 screenshots/
-pipeline/
+pipeline_old/
 cv/
 
 *.ipynb

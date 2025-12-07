@@ -82,8 +82,8 @@ def pruning_small_side_tubes(
 def pruning_recursive_side_tubes(
     df_tube: pd.DataFrame,
     keeping_tube_length: int = 10,
-    conf_thres: float = 0.5,
-    strictly_inside: bool = True,
+    conf_thres: float = 1.0,
+    strictly_inside: bool = False,
 ) -> pd.DataFrame:
     """
     Prune side tubes using strict containment on z-spans (no recursion needed).

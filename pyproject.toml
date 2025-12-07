@@ -18,7 +18,8 @@ dependencies = [
     "torch",
     "numba",
     "ultralytics",   # YOLO (v8/v11)
-    "ensemble-boxes"
+    "ensemble-boxes",
+    "scikit-learn"
 ]
 
 [tool.setuptools]
